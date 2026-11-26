@@ -208,6 +208,26 @@
              border: 1px solid rgba(192, 132, 252, .2); }
   .np-card .hd { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: #f0abfc; margin-bottom: 8px; letter-spacing: .04em; }
   .up-next { display: flex; flex-direction: column; gap: 2px; max-height: 150px; overflow-y: auto; }
+  /* Gợi ý & Khám phá */
+  .mix-banner { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 22px; border-radius: 18px;
+                background: linear-gradient(120deg, rgba(126, 34, 206, .55), rgba(192, 38, 211, .35) 60%, rgba(79, 70, 229, .35));
+                border: 1px solid rgba(240, 171, 252, .25); }
+  .mix-banner .kind { font-size: 12px; font-weight: 700; color: #f0abfc; text-transform: uppercase; letter-spacing: .08em; }
+  .rec-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 170px); grid-template-columns: none; overflow-x: auto;
+             padding: 4px 2px 10px; scroll-snap-type: x proximity; }
+  .rec-row > * { scroll-snap-align: start; }
+  .disc-card { cursor: pointer; }
+  .disc-card .art { position: relative; }
+  .disc-play { position: absolute; right: 8px; bottom: 8px; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+               background: var(--fuchsia); color: #1a0d33; box-shadow: 0 6px 18px rgba(217, 70, 239, .5); }
+  .disc-badge { position: absolute; left: 8px; top: 8px; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 99px; background: rgba(0, 0, 0, .55); }
+  .disc-card.on { border-color: var(--fuchsia); background: rgba(112, 26, 117, .55); }
+  .disc-why { font-size: 11px; margin-top: 2px; color: #f0abfc; }
+  .disc-links { display: flex; gap: 10px; margin-top: 6px; font-size: 11px; font-weight: 700; }
+  .disc-links a { color: var(--muted); text-decoration: none; } .disc-links a:hover { color: #fff; text-decoration: underline; }
+  .mixes.rec-row { grid-template-columns: none !important; }   /* không để lưới 2 cột trên điện thoại đè lên hàng cuộn ngang */
+  @media (max-width: 760px) { .mixes.rec-row { grid-auto-columns: 44%; gap: 10px; } .mix-banner { padding: 16px; } }
+
   /* Đĩa than xoay */
   .vinyl-wrap { position: relative; width: min(230px, 62vw); aspect-ratio: 1; margin: 46px auto 26px; --beat: 0; }
   .vinyl { position: absolute; inset: 0; border-radius: 50%;
@@ -517,8 +537,9 @@
   <div class="row-btns">
     <button class="soft-btn solid" id="autoArtBtn" title="Tìm ảnh bìa trên iTunes cho bài chưa có bìa">Ảnh bìa</button>
     <button class="soft-btn solid" id="autoLyrBtn" title="Tìm lời bài hát trên LRCLIB cho bài chưa có lời">Lời bài hát</button>
+    <button class="soft-btn solid" id="autoDiscBtn" title="Gợi ý bài mới qua Deezer dựa trên ca sĩ bạn hay nghe">Khám phá</button>
   </div>
-  <p class="hint" style="margin-top:-12px">Khi bật, tên bài và ca sĩ được gửi tới iTunes (ảnh bìa) / LRCLIB (lời) để tìm. Không gửi file nhạc.</p>
+  <p class="hint" style="margin-top:-12px">Khi bật, tên bài và ca sĩ được gửi tới iTunes (ảnh bìa), LRCLIB (lời) và Deezer (khám phá) để tìm. Không gửi file nhạc hay lịch sử nghe.</p>
   <div class="slide-row">
     <div><div class="top"><span>Độ phủ tím</span><b id="tintVal">75%</b></div><input id="tint" class="slider" type="range" min="35" max="95" value="75"></div>
     <div><div class="top"><span>Độ mờ kính các khung</span><b id="blurVal">18px</b></div><input id="blur" class="slider" type="range" min="0" max="32" value="18"></div>
@@ -767,7 +788,7 @@ let tracks = [], folders = [];
 let queue = [], queueBase = [], queueCtx = '';
 let curId = null, curUrl = null;
 let view = { type: 'home' };
-const settings = Object.assign({ shuffle: false, repeat: 'off', volume: 0.8, muted: false, bg: 'bg-obsidian', tint: 75, blur: 18, libWide: false, bgFromCover: false, autoLyrics: true, autoArt: true },
+const settings = Object.assign({ shuffle: false, repeat: 'off', volume: 0.8, muted: false, bg: 'bg-obsidian', tint: 75, blur: 18, libWide: false, bgFromCover: false, autoLyrics: true, autoArt: true, autoDiscover: true },
                                JSON.parse(localStorage.getItem('mm-settings') || '{}'));
 const saveSettings = () => localStorage.setItem('mm-settings', JSON.stringify(settings));
 const artUrls = new Map();
@@ -1296,6 +1317,157 @@ async function fetchArt(t) {
 }
 
 // =====================================================================
+//  LỊCH SỬ NGHE (chỉ lưu trên máy này) → dùng cho gợi ý
+// =====================================================================
+const stats = { map: {}, saveT: 0 };            // id bài → { p: lượt nghe, s: lượt bỏ qua, l: lần nghe gần nhất }
+const listen = { id: null, secs: 0, counted: false, lastT: 0 };
+const S = id => stats.map[id] || { p: 0, s: 0, l: 0 };
+function saveStats() { clearTimeout(stats.saveT); stats.saveT = setTimeout(() => metaSet('stats', stats.map), 1500); }
+function finishListen() {
+  // chuyển bài sau 3–15 giây mà chưa tính là "đã nghe" → coi như bỏ qua
+  if (listen.id && !listen.counted && listen.secs >= 3 && listen.secs < 15) {
+    const s = stats.map[listen.id] = { ...S(listen.id) }; s.s++; saveStats();
+  }
+  Object.assign(listen, { id: null, secs: 0, counted: false, lastT: 0 });
+}
+function trackListen() {
+  if (!curId) return;
+  if (listen.id !== curId) { finishListen(); Object.assign(listen, { id: curId, lastT: audio.currentTime }); return; }
+  const dt = audio.currentTime - listen.lastT;
+  if (dt > 0 && dt < 1.5) listen.secs += dt;    // chỉ cộng thời gian nghe thật (bỏ qua lúc tua)
+  listen.lastT = audio.currentTime;
+  if (!listen.counted && (listen.secs >= 30 || (audio.duration && listen.secs >= audio.duration * 0.5))) {
+    listen.counted = true;
+    const s = stats.map[curId] = { ...S(curId) }; s.p++; s.l = Date.now(); saveStats();
+  }
+}
+
+// =====================================================================
+//  GỢI Ý TỪ THƯ VIỆN: Có thể bạn thích • Bạn bè vừa tải lên • Nghe lại • Mix hôm nay
+// =====================================================================
+const recLists = {};
+const DAY = 86400e3;
+function computeRecs() {
+  const now = Date.now(), all = live();
+  // mức "thích" từng ca sĩ / album: lượt nghe − nửa lượt bỏ qua, + thêm nếu bạn bấm ♥
+  const aff = new Map(), albAff = new Map();
+  for (const t of all) {
+    const s = S(t.id), w = s.p - s.s * 0.5 + (t.liked ? 2 : 0);
+    if (!w) continue;
+    const a = normName(t.artist); aff.set(a, (aff.get(a) || 0) + w);
+    if (t.album) { const al = normName(t.album); albAff.set(al, (albAff.get(al) || 0) + w); }
+  }
+  const forYou = all.filter(t => S(t.id).p <= 1 && now - S(t.id).l > 3 * DAY && normName(t.artist) !== UNKNOWN_ARTIST)
+    .map(t => ({ t, sc: (aff.get(normName(t.artist)) || 0) + (t.album ? (albAff.get(normName(t.album)) || 0) * 0.5 : 0) - S(t.id).s * 2 + Math.random() * 0.8 }))
+    .filter(o => o.sc > 1).sort((a, b) => b.sc - a.sc).slice(0, 12).map(o => o.t);
+  const friends = all.filter(t => t.cloud && t.by && t.by !== cloud.user && now - (t.added || 0) < 21 * DAY && !S(t.id).p)
+    .sort((a, b) => (b.added || 0) - (a.added || 0)).slice(0, 12);
+  const again = all.filter(t => S(t.id).p >= 3 && now - S(t.id).l > 14 * DAY).sort((a, b) => S(b.id).p - S(a.id).p).slice(0, 12);
+  // Mix hôm nay: xen kẽ các nhóm trên + vài bài đã thích, không trùng
+  const liked = all.filter(t => t.liked).sort(() => Math.random() - 0.5).slice(0, 6);
+  const fresh = all.filter(t => !S(t.id).p).sort(() => Math.random() - 0.5).slice(0, 6);
+  const mix = [], used = new Set();
+  for (let i = 0; mix.length < 25 && i < 12; i++)
+    for (const g of [forYou, friends, liked, again, fresh]) { const t = g[i]; if (t && !used.has(t.id)) { used.add(t.id); mix.push(t); } }
+  Object.assign(recLists, { foryou: forYou, friends, again, mix });
+  // ca sĩ hay nghe nhất → hạt giống cho mục Khám phá
+  const top = [...aff.entries()].filter(([a, w]) => a && a !== UNKNOWN_ARTIST && w > 0).sort((a, b) => b[1] - a[1]).slice(0, 4)
+    .map(([a]) => all.find(t => normName(t.artist) === a)?.artist).filter(Boolean);
+  recLists.seeds = top.length ? top : artists().filter(a => normName(a.name) !== UNKNOWN_ARTIST).slice(0, 4).map(a => a.name);
+  return recLists;
+}
+function recCard(t, key, i, note) {
+  return `<button class="mix" data-rec="${key}:${i}">
+    <div class="art">${coverHTML(artUrl(t), t.album || t.title)}</div>
+    <span class="play-fab">${icon('play', 'sm fill')}</span>
+    <div class="t1" style="font-family:var(--display);font-weight:700">${esc(t.title)}</div>
+    <div class="t2">${esc(note || t.artist)}</div></button>`;
+}
+function recsHTML() {
+  const r = computeRecs();
+  let h = '';
+  if (r.mix.length >= 4) h += `<section><div class="mix-banner">
+      <div><div class="kind">Dành cho bạn</div><h2 class="sec" style="margin:4px 0 2px">Mix hôm nay</h2>
+      <div class="t2" style="white-space:normal">${r.mix.length} bài trộn từ gu nghe của bạn, bài mới của bạn bè và bài bạn đã thích. Đổi mỗi lần mở app.</div></div>
+      <button class="big-play" data-recmix title="Phát Mix hôm nay">${icon('play', 'lg fill')}</button></div></section>`;
+  const row = (title, key, sub, note) => r[key].length ? `<section><div class="sec-head"><h2 class="sec">${title}</h2><span class="t2">${sub}</span></div>
+      <div class="mixes rec-row">${r[key].slice(0, 8).map((t, i) => recCard(t, key, i, note(t))).join('')}</div></section>` : '';
+  h += row('Có thể bạn thích', 'foryou', 'theo ca sĩ bạn hay nghe', t => t.artist);
+  h += row('Bạn bè vừa tải lên', 'friends', 'bạn chưa nghe', t => `${t.artist} • ${t.by}`);
+  h += row('Nghe lại', 'again', 'lâu rồi chưa nghe', t => `${t.artist} • ${S(t.id).p} lượt`);
+  h += discoverHTML();
+  return h;
+}
+
+// =====================================================================
+//  KHÁM PHÁ BÀI MỚI (Deezer, nghe thử 30 giây) — cần đăng nhập thư viện chung
+// =====================================================================
+const disc = { items: [], seedsKey: '', loading: false, err: '', playing: null, at: 0 };
+const preview = new Audio();          // máy phát riêng cho đoạn nghe thử (không qua bộ đo nhịp)
+preview.preload = 'none';
+const libKeys = () => new Set(live().map(t => normName(t.title) + '|' + normName(t.artist)));
+async function loadDiscover(refresh) {
+  if (!settings.autoDiscover || !cloud.on || disc.loading) return;
+  const seeds = recLists.seeds || computeRecs().seeds;
+  const seedsKey = seeds.map(normName).sort().join('|');
+  if (!refresh && seedsKey === disc.seedsKey && Date.now() - disc.at < 6 * 3600e3) return;
+  if (!refresh && !disc.items.length) {   // dùng tạm danh sách đã lưu trên máy
+    const saved = await metaGet('disc');
+    if (saved && saved.seedsKey === seedsKey && Date.now() - saved.at < 6 * 3600e3) { Object.assign(disc, saved); if (view.type === 'home') renderMain(); return; }
+  }
+  disc.loading = true; disc.err = ''; if (view.type === 'home') renderMain();
+  try {
+    const r = await apiFetch('discover', { method: 'POST', body: JSON.stringify({ artists: seeds, refresh: !!refresh }), headers: { 'content-type': 'application/json' } });
+    const have = libKeys();
+    const items = r.items.filter(i => !have.has(normName(i.title) + '|' + normName(i.artist)));
+    for (let i = items.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [items[i], items[j]] = [items[j], items[i]]; }
+    Object.assign(disc, { items: items.slice(0, 16), seedsKey, at: Date.now() });
+    await metaSet('disc', { items: disc.items, seedsKey, at: disc.at });
+  } catch (e) { disc.err = e.message; Object.assign(disc, { seedsKey, at: Date.now() - 6 * 3600e3 + 10 * 60e3 }); }   // lỗi → 10 phút sau mới thử lại
+  finally { disc.loading = false; if (view.type === 'home') renderMain(); }
+}
+function discoverHTML() {
+  if (!settings.autoDiscover) return '';
+  if (!cloud.on) return cloud.available ? `<section><div class="sec-head"><h2 class="sec">Khám phá bài mới</h2></div>
+      <p class="t2">Đăng nhập thư viện chung để xem gợi ý bài mới từ các ca sĩ giống gu của bạn.</p></section>` : '';
+  const head = `<div class="sec-head"><h2 class="sec">Khám phá bài mới</h2>
+      <button class="link" data-discrefresh>${disc.loading ? 'Đang tìm…' : 'Làm mới'}</button></div>`;
+  if (!disc.items.length) return `<section>${head}<p class="t2">${disc.loading ? 'Đang tìm bài mới theo gu của bạn…'
+      : disc.err ? 'Không tải được gợi ý: ' + esc(disc.err) : 'Nghe thêm vài bài để app hiểu gu của bạn.'}</p></section>`;
+  return `<section>${head}<div class="mixes rec-row">${disc.items.map(d => {
+    const on = disc.playing === d.dz && !preview.paused;
+    const q = encodeURIComponent(d.artist + ' ' + d.title);
+    return `<div class="mix disc-card ${on ? 'on' : ''}" data-disc="${d.dz}" role="button" tabindex="0" title="Nghe thử 30 giây">
+      <div class="art"><div class="cover" style="${d.cover ? `background-image:url(${esc(d.cover)})` : coverStyle(null, d.title)}"></div>
+        <span class="disc-play">${icon(on ? 'pause' : 'play', 'sm fill')}</span><span class="disc-badge">30s</span></div>
+      <div class="t1" style="font-family:var(--display);font-weight:700">${esc(d.title)}</div>
+      <div class="t2">${esc(d.artist)}</div>
+      <div class="t2 disc-why">${d.own ? 'Bài khác của ' : 'Giống '}${esc(d.because)}</div>
+      <div class="disc-links"><a href="https://www.youtube.com/results?search_query=${q}" target="_blank" rel="noopener">YouTube</a>
+        <a href="https://open.spotify.com/search/${q}" target="_blank" rel="noopener">Spotify</a></div></div>`;
+  }).join('')}</div><p class="hint" style="margin-top:10px">Nghe thử do Deezer cung cấp. Thích bài nào thì mở YouTube/Spotify để nghe đủ.</p></section>`;
+}
+async function togglePreview(dz) {
+  if (disc.playing === dz && !preview.paused) { preview.pause(); return; }
+  try {
+    const { preview: url } = await apiFetch('preview/' + dz);   // link nghe thử hết hạn nhanh → luôn xin link mới
+    if (!audio.paused) audio.pause();
+    preview.src = url; preview.volume = settings.muted ? 0 : settings.volume;
+    disc.playing = dz; await preview.play();
+  } catch (e) { disc.playing = null; toast('Không nghe thử được: ' + e.message); }
+  renderDiscState();
+}
+function renderDiscState() {
+  $$('.disc-card').forEach(c => {
+    const on = +c.dataset.disc === disc.playing && !preview.paused;
+    c.classList.toggle('on', on);
+    c.querySelector('.disc-play').innerHTML = icon(on ? 'pause' : 'play', 'sm fill');
+  });
+}
+preview.onpause = preview.onended = () => { if (preview.ended) disc.playing = null; renderDiscState(); };
+preview.onplay = renderDiscState;
+
+// =====================================================================
 //  GIAO DIỆN: CỘT GIỮA
 // =====================================================================
 const PILLS = [['home', 'Tất cả'], ['songs', 'Bài hát'], ['albums', 'Album'], ['artists', 'Ca sĩ'], ['liked', 'Đã thích']];
@@ -1347,6 +1519,7 @@ function renderMain() {
     for (const a of al) { if (quick.length >= 8) break; quick.push({ kind: 'album', a }); }
     for (const a of ar) { if (quick.length >= 8) break; quick.push({ kind: 'artist', a }); }
     html += `<section><div class="quick">${quick.map(quickCard).join('')}</div></section>`;
+    html += recsHTML();
     html += `<section><div class="sec-head"><h2 class="sec">Mix của bạn</h2><button class="link" data-view="artists">Xem tất cả</button></div>
              <div class="mixes">${ar.slice(0, 6).map((a, i) => mixCard(a, i)).join('')}</div></section>`;
     list = live().slice().sort((a, b) => (b.added || 0) - (a.added || 0)).slice(0, 30); ctx = 'Mới thêm gần đây';
@@ -1385,6 +1558,7 @@ function renderMain() {
     html += rowsHTML(list);
   }
   main.innerHTML = html;
+  if (view.type === 'home' && !q) setTimeout(() => loadDiscover(), 0);
   if (list.length) bindRows(main, list, ctx);
 }
 function likedCover(cls = '') { return `<div class="cover ${cls}" style="background-image:linear-gradient(135deg,#4f46e5,#c026d3,#f0abfc)">${icon('heart', 'lg')}</div>`; }
@@ -1529,6 +1703,7 @@ function startBeat() {
 function renderPlayState() {
   const p = !audio.paused;
   document.body.classList.toggle('is-playing', p);
+  if (p && !preview.paused) preview.pause();   // phát nhạc chính thì dừng nghe thử
   if (p) startBeat();
   for (const b of [$('playBtn'), $('playBtn2')]) b.innerHTML = icon(p ? 'pause' : 'play', (b.id === 'playBtn2' ? 'lg' : 'sm') + ' fill');
   $$('.rows').forEach(r => r.classList.toggle('paused', !p));
@@ -1583,6 +1758,7 @@ async function play(id) {
   }
   if (curUrl && curUrl.startsWith('blob:')) URL.revokeObjectURL(curUrl);
   curUrl = src;
+  finishListen(); if (!preview.paused) preview.pause();
   curId = id; audio.src = curUrl; queueArt([t], true);
   audio.play().catch(() => {});
   renderNow(); markPlayingRows();
@@ -1675,7 +1851,7 @@ audio.ontimeupdate = () => {
   for (const [cur, tot] of [['cur', 'tot'], ['cur2', 'tot2']]) { $(cur).textContent = fmt(c); $(tot).textContent = fmt(d); }
   if (!seeking && d) for (const s of [$('seek'), $('seek2')]) { s.value = c / d * 1000; setFill(s); }
   $('miniBar').style.width = d ? (c / d * 100) + '%' : 0;
-  syncLyrics();
+  syncLyrics(); trackListen();
 };
 for (const s of [$('seek'), $('seek2')]) {
   s.oninput = () => { seeking = true; setFill(s); $('cur').textContent = $('cur2').textContent = fmt(s.value / 1000 * (audio.duration || 0)); };
@@ -1688,9 +1864,14 @@ $('fsBtn').onclick = () => document.fullscreenElement ? document.exitFullscreen(
 
 // Một bộ xử lý click chung cho cả trang
 document.addEventListener('click', async e => {
-  const el = e.target.closest('[data-act],[data-view],[data-open],[data-playgroup],[data-like],[data-del],[data-jump],[data-np],[data-close],[data-preset],.row');
+  const el = e.target.closest('[data-act],[data-view],[data-open],[data-playgroup],[data-like],[data-del],[data-jump],[data-np],[data-close],[data-preset],[data-rec],[data-recmix],[data-disc],[data-discrefresh],.row');
   if (!el) return;
   const d = el.dataset;
+  if (e.target.closest('a[href]')) return;   // link YouTube/Spotify: để trình duyệt tự mở
+  if (d.rec) { const [k, i] = d.rec.split(':'); const l = recLists[k] || []; return playList(l, l[+i]?.id, { foryou: 'Có thể bạn thích', friends: 'Bạn bè vừa tải lên', again: 'Nghe lại' }[k]); }
+  if (d.recmix !== undefined) return playList(recLists.mix || [], null, 'Mix hôm nay');
+  if (d.disc) return togglePreview(+d.disc);
+  if (d.discrefresh !== undefined) return loadDiscover(true);
   if (d.playgroup !== undefined) { e.stopPropagation(); const [l, c] = groupList(d.playgroup, d.key); return playList(l, null, c); }
   if (d.like) { e.stopPropagation(); return toggleLike(d.like); }
   if (d.del) { e.stopPropagation(); return removeTrack(d.del); }
@@ -1764,6 +1945,8 @@ function renderAutoBtns() {
   $('autoArtBtn').textContent = (settings.autoArt ? '✓ ' : '') + 'Ảnh bìa: ' + (settings.autoArt ? 'bật' : 'tắt');
   $('autoLyrBtn').classList.toggle('primary', settings.autoLyrics);
   $('autoLyrBtn').textContent = (settings.autoLyrics ? '✓ ' : '') + 'Lời bài hát: ' + (settings.autoLyrics ? 'bật' : 'tắt');
+  $('autoDiscBtn').classList.toggle('primary', settings.autoDiscover);
+  $('autoDiscBtn').textContent = (settings.autoDiscover ? '✓ ' : '') + 'Khám phá: ' + (settings.autoDiscover ? 'bật' : 'tắt');
 }
 $('autoArtBtn').onclick = () => {
   settings.autoArt = !settings.autoArt; saveSettings(); renderAutoBtns();
@@ -1771,6 +1954,11 @@ $('autoArtBtn').onclick = () => {
   else { artQ.queue = []; toast('Đã tắt tự tìm ảnh bìa'); }
 };
 $('autoLyrBtn').onclick = () => $('lyrAuto').click();
+$('autoDiscBtn').onclick = () => {
+  settings.autoDiscover = !settings.autoDiscover; saveSettings(); renderAutoBtns();
+  if (!settings.autoDiscover) preview.pause();
+  toast(settings.autoDiscover ? 'Đã bật Khám phá bài mới' : 'Đã tắt Khám phá bài mới'); renderMain();
+};
 $('bgCoverBtn').onclick = () => { settings.bgFromCover = !settings.bgFromCover; saveSettings(); applyBg(); toast(settings.bgFromCover ? 'Nền sẽ đổi theo bìa bài đang phát' : 'Đã tắt nền theo bìa'); };
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && Date.now() - lastScan > 30000) syncFolders(false);
@@ -1824,7 +2012,7 @@ if (!window.showDirectoryPicker) $('linkBtn').classList.add('hidden');
 // Khởi động
 (async () => {
   try {
-    db = await openDB(); tracks = await dbAll(); folders = (await metaGet('folders')) || [];
+    db = await openDB(); tracks = await dbAll(); folders = (await metaGet('folders')) || []; stats.map = (await metaGet('stats')) || {};
     const img = await metaGet('bgImage'); if (img) bgImageUrl = URL.createObjectURL(img);
     if (navigator.storage?.persist) navigator.storage.persist();
   } catch (e) { toast('Trình duyệt không cho lưu thư viện, nhạc chỉ giữ đến khi đóng trang.'); }

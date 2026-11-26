@@ -1,6 +1,6 @@
 // Service worker: lưu giao diện app để mở được khi không có mạng.
 // Khi sửa app, tăng số phiên bản này để điện thoại tải bản mới.
-const VERSION = 'v12';
+const VERSION = 'v13';
 const SHELL = ['./', './index.html', './manifest.webmanifest',
                './icon-192.png', './icon-512.png', './icon-maskable.png', './apple-touch-icon.png', './favicon.png'];
 

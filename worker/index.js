@@ -260,6 +260,59 @@ async function autoArt(env, st, id, cachedOnly) {
   return json({ none: true });
 }
 
+// ---------- Khám phá bài mới (Deezer: ca sĩ tương tự + bài nổi bật, nghe thử 30 giây) ----------
+// Deezer không cho trình duyệt gọi trực tiếp (không có CORS) nên đi qua đây.
+// Link nghe thử của Deezer hết hạn sau ~15 phút → không lưu link, app xin link mới qua /api/preview/<id>.
+async function deezer(path) {
+  const r = await fetch('https://api.deezer.com/' + path);
+  if (!r.ok) throw new Error('deezer ' + r.status);
+  const j = await r.json();
+  if (j.error) throw new Error('deezer ' + (j.error.message || j.error.type || 'error'));
+  return j;
+}
+async function discover(req, env) {
+  let body = {};
+  try { body = await req.json(); } catch { return err(400, 'Dữ liệu không hợp lệ.'); }
+  const seeds = [...new Set((body.artists || []).map(a => clean(a, 80)).filter(a => a && normName(a) !== UNKNOWN_ARTIST))].slice(0, 4);
+  if (!seeds.length) return json({ items: [], at: Date.now() });
+  const key = 'disc:' + (await sha256(seeds.map(normName).sort().join('|'))).slice(0, 32);
+  if (!body.refresh) { const saved = await env.INDEX.get(key, 'json'); if (saved) return json(saved); }
+  let found;
+  try {
+    // 1) tìm đúng ca sĩ trên Deezer
+    found = (await Promise.all(seeds.map(async name => {
+      const x = (await deezer('search/artist?limit=3&q=' + encodeURIComponent(name))).data?.find(a => {
+        const n1 = normName(a.name), n2 = normName(name); return n1 === n2 || n1.includes(n2) || n2.includes(n1);
+      });
+      return x ? { id: x.id, name } : null;
+    }))).filter(Boolean);
+  } catch { return err(502, 'Không kết nối được Deezer.'); }
+  // 2) ca sĩ tương tự của từng ca sĩ bạn hay nghe
+  const pool = found.map(s => ({ id: s.id, name: s.name, because: s.name, own: true }));
+  for (const s of found) {
+    try { for (const r of ((await deezer(`artist/${s.id}/related?limit=6`)).data || []).slice(0, 5)) pool.push({ id: r.id, name: r.name, because: s.name }); } catch { }
+  }
+  const seen = new Set();
+  const artistsToUse = pool.filter(p => !seen.has(p.id) && seen.add(p.id)).slice(0, 16);
+  // 3) bài nổi bật của họ (bài khác của chính ca sĩ bạn thích + của ca sĩ tương tự)
+  const tops = await Promise.all(artistsToUse.map(p => deezer(`artist/${p.id}/top?limit=${p.own ? 4 : 2}`).then(j => ({ p, list: j.data || [] })).catch(() => ({ p, list: [] }))));
+  const items = [];
+  for (const { p, list } of tops) for (const t of list) {
+    if (t.readable === false || !t.preview) continue;
+    items.push({ dz: t.id, title: t.title_short || t.title, artist: t.artist?.name || p.name, album: t.album?.title || '',
+                 cover: t.album?.cover_medium || '', link: t.link || '', duration: t.duration || 0, because: p.because, own: !!p.own });
+  }
+  const data = { items, at: Date.now() };
+  await env.INDEX.put(key, JSON.stringify(data), { expirationTtl: 6 * 3600 });
+  return json(data);
+}
+async function previewUrl(dzId) {
+  try {
+    const t = await deezer('track/' + dzId);
+    return t.preview ? json({ preview: t.preview }) : err(404, 'Bài này không có đoạn nghe thử.');
+  } catch { return err(502, 'Không kết nối được Deezer.'); }
+}
+
 async function deleteSong(env, st, id, user) {
   const meta = (await env.INDEX.getWithMetadata('song:' + id)).metadata;
   if (!meta) return err(404, 'Không tìm thấy.');
@@ -294,6 +347,8 @@ async function api(req, env, url) {
   const st = env.TEST_STORE || b2Store(env);
   if (res === 'me' && method === 'GET') return json(user);
   if (res === 'library' && method === 'GET') return json(await listLibrary(env));
+  if (res === 'discover' && method === 'POST') return discover(req, env);
+  if (res === 'preview' && /^\d{1,12}$/.test(id || '') && method === 'GET') return previewUrl(id);
   if (res === 'art' && id && ID_RE.test(id) && parts.length === 2 && method === 'POST')
     return autoArt(env, st, id, url.searchParams.get('cached') === '1');
   if (res === 'lyrics' && id && ID_RE.test(id) && parts.length === 2) {
