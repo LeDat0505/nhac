@@ -414,7 +414,7 @@
       <svg class="i sm"><use href="#i-search"/></svg>
       <input id="search" type="search" placeholder="Bạn muốn nghe gì?" autocomplete="off">
     </div>
-    <button class="grad-btn" id="bgBtn" title="Đổi hình nền"><svg class="i sm"><use href="#i-palette"/></svg><span>Đổi nền</span></button>
+    <button class="grad-btn" id="bgBtn" title="Tùy chỉnh: hình nền, tự tìm, phát nhạc"><svg class="i sm"><use href="#i-palette"/></svg><span>Tùy chỉnh</span></button>
   </div>
   <div class="hdr-right">
     <span id="status" class="t2"></span>
@@ -517,7 +517,7 @@
 <dialog id="bgDlg">
   <div class="dlg-head">
     <div><div class="dlg-icon"><svg class="i"><use href="#i-sparkle"/></svg></div>
-      <div><h3>Tùy chỉnh hình nền</h3><p>Giữ sắc tím theo phong cách của bạn</p></div></div>
+      <div><h3>Tùy chỉnh</h3><p>Hình nền, tự tìm trên mạng và cách phát nhạc</p></div></div>
     <button class="icon-btn" data-close><svg class="i"><use href="#i-x"/></svg></button>
   </div>
   <span class="lbl">1. Chủ đề có sẵn</span>
@@ -540,6 +540,11 @@
     <button class="soft-btn solid" id="autoDiscBtn" title="Gợi ý bài mới qua Deezer dựa trên ca sĩ bạn hay nghe">Khám phá</button>
   </div>
   <p class="hint" style="margin-top:-12px">Khi bật, tên bài và ca sĩ được gửi tới iTunes (ảnh bìa), LRCLIB (lời) và Deezer (khám phá) để tìm. Không gửi file nhạc hay lịch sử nghe.</p>
+  <span class="lbl">4. Phát nhạc</span>
+  <div class="row-btns">
+    <button class="soft-btn solid" id="autoplayBtn" title="Hết danh sách thì tự nối thêm bài hợp gu thay vì dừng">Tự phát tiếp</button>
+    <button class="soft-btn solid" id="fadeBtn" title="Cuối bài nhỏ dần, đầu bài sau to dần (iPhone không hỗ trợ)">Chuyển bài mượt</button>
+  </div>
   <div class="slide-row">
     <div><div class="top"><span>Độ phủ tím</span><b id="tintVal">75%</b></div><input id="tint" class="slider" type="range" min="35" max="95" value="75"></div>
     <div><div class="top"><span>Độ mờ kính các khung</span><b id="blurVal">18px</b></div><input id="blur" class="slider" type="range" min="0" max="32" value="18"></div>
@@ -788,7 +793,7 @@ let tracks = [], folders = [];
 let queue = [], queueBase = [], queueCtx = '';
 let curId = null, curUrl = null;
 let view = { type: 'home' };
-const settings = Object.assign({ shuffle: false, repeat: 'off', volume: 0.8, muted: false, bg: 'bg-obsidian', tint: 75, blur: 18, libWide: false, bgFromCover: false, autoLyrics: true, autoArt: true, autoDiscover: true },
+const settings = Object.assign({ shuffle: false, repeat: 'off', volume: 0.8, muted: false, bg: 'bg-obsidian', tint: 75, blur: 18, libWide: false, bgFromCover: false, autoLyrics: true, autoArt: true, autoDiscover: true, autoplay: true, fade: 0 },
                                JSON.parse(localStorage.getItem('mm-settings') || '{}'));
 const saveSettings = () => localStorage.setItem('mm-settings', JSON.stringify(settings));
 const artUrls = new Map();
@@ -1657,7 +1662,7 @@ function renderNow() {
   }
   $('npCount').textContent = queue.length ? `${Math.max(queue.length - i - 1, 0)} bài còn lại` : '';
   $('upNext').innerHTML = next.length ? next.map(n => `<button data-jump="${n.id}">${coverHTML(artUrl(n), n.album || n.title)}<div style="min-width:0"><div class="t1">${esc(n.title)}</div><div class="t2">${esc(n.artist)}</div></div></button>`).join('')
-                                      : `<div class="none">${t ? 'Hết danh sách. Bật lặp lại để nghe tiếp.' : 'Danh sách chờ đang trống.'}</div>`;
+                                      : `<div class="none">${!t ? 'Danh sách chờ đang trống.' : settings.autoplay ? 'Hết danh sách: sẽ tự phát tiếp bài hợp gu của bạn.' : 'Hết danh sách. Bật lặp lại hoặc Tự phát tiếp để nghe tiếp.'}</div>`;
   document.title = t ? `${t.title} • ${t.artist}` : 'Nhạc của tôi';
   if ('mediaSession' in navigator && t) {
     navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist, album: t.album,
@@ -1741,36 +1746,94 @@ function playList(list, startId, ctx, forceShuffle) {
   queue = settings.shuffle ? shuffled(queueBase, startId) : queueBase.slice();
   play(startId || queue[0]);
 }
-async function play(id) {
+// Trạng thái tự qua bài: đếm lỗi liên tiếp (tránh nhảy vòng vô tận), mờ dần/to dần, tải trước bài kế
+const flow = { errors: 0, fadeIn: false, preloaded: null };
+function skipBroken(t, why) {
+  flow.errors++;
+  if (flow.errors > 5) { toast('Nhiều bài liên tiếp không phát được, đã dừng. Kiểm tra mạng hoặc quyền đọc thư mục.'); flow.errors = 0; return; }
+  toast(`Bỏ qua "${t.title}": ${why}`);
+  curId = t.id;                       // để step() tính bài kế tiếp từ đúng vị trí
+  setTimeout(() => step(1, true), 600);
+}
+async function play(id, fromAuto) {
   const t = tracks.find(x => x.id === id); if (!t) return;
   let src;
   if (t.cloud) {
     // Đã lưu trong máy → phát ngay từ máy; chưa có → phát trực tuyến và lưu vào máy ở chế độ nền
     const blob = cloud.cached.has(t.sid) ? await cacheGet(t.sid) : null;
     if (blob) src = URL.createObjectURL(blob);
-    else if (!navigator.onLine) { toast(`"${t.title}" chưa được lưu vào máy, cần có mạng để nghe.`); return; }
+    else if (!navigator.onLine) {
+      if (fromAuto) return skipBroken(t, 'chưa lưu vào máy, đang offline');
+      toast(`"${t.title}" chưa được lưu vào máy, cần có mạng để nghe.`); return;
+    }
     else { src = 'api/songs/' + t.sid; cacheSong(t); }
   } else {
     let blob;
     try { blob = await getBlob(t); }
-    catch (e) { toast(`Không mở được "${t.title}": ${e.message}`); if (folders.length) $('permBtn').classList.remove('hidden'); return; }
+    catch (e) {
+      if (folders.length) $('permBtn').classList.remove('hidden');
+      if (fromAuto) return skipBroken(t, e.message);
+      toast(`Không mở được "${t.title}": ${e.message}`); return;
+    }
     src = URL.createObjectURL(blob);
   }
   if (curUrl && curUrl.startsWith('blob:')) URL.revokeObjectURL(curUrl);
   curUrl = src;
   finishListen(); if (!preview.paused) preview.pause();
+  flow.fadeIn = !!fromAuto && settings.fade > 0; flow.preloaded = null;
   curId = id; audio.src = curUrl; queueArt([t], true);
+  if (flow.fadeIn) audio.volume = 0; else applyVolume();
   audio.play().catch(() => {});
   renderNow(); markPlayingRows();
+}
+// Mỗi nhịp thời gian: mờ dần cuối bài / to dần đầu bài, và tải trước bài kế tiếp
+function flowTick() {
+  const d = audio.duration || 0, c = audio.currentTime, f = settings.fade;
+  if (!d) return;   // chưa biết độ dài bài (vừa đổi bài) → chờ, đừng hủy hiệu ứng to dần
+  if (f > 0 && d > f * 3 && !settings.muted) {
+    let k = 1;
+    if (settings.repeat !== 'one' && d - c < f) k = Math.max(0, (d - c) / f);      // mờ dần trước khi hết bài
+    if (flow.fadeIn && c < f) k = Math.min(k, c / f); else if (c >= f) flow.fadeIn = false;   // to dần đầu bài
+    audio.volume = settings.volume * k;
+  } else if (flow.fadeIn) { flow.fadeIn = false; applyVolume(); }
+  if (d && c > d * 0.5 && flow.preloaded !== curId) {
+    flow.preloaded = curId;
+    const next = tracks.find(x => x.id === queue[queue.indexOf(curId) + 1]);
+    if (next?.cloud && !cloud.cached.has(next.sid) && navigator.onLine) cacheSong(next);   // bài kế sẵn sàng, chuyển bài tức thì
+  }
+}
+// Tự phát tiếp: chọn bài hợp gu để nối vào khi hết danh sách
+function autoplayTracks() {
+  const cur = tracks.find(x => x.id === curId);
+  const recent = new Set(queue.slice(-60)), now = Date.now();
+  const ok = t => t && !recent.has(t.id) && t.id !== curId && now - S(t.id).l > 6 * 3600e3;
+  const r = computeRecs();
+  const sameArtist = cur ? live().filter(t => ok(t) && normName(t.artist) === normName(cur.artist)).sort((a, b) => S(a.id).p - S(b.id).p) : [];
+  const groups = [sameArtist.slice(0, 3), r.foryou, r.friends, live().filter(t => ok(t) && t.liked), live().filter(ok).sort(() => Math.random() - 0.5)];
+  const out = [], used = new Set();
+  for (let i = 0; out.length < 10 && i < 12; i++)
+    for (const g of groups) { const t = g[i]; if (ok(t) && !used.has(t.id) && out.length < 10) { used.add(t.id); out.push(t); } }
+  return out;
 }
 function step(dir, auto) {
   if (!queue.length) { const l = live(); if (l.length) playList(l, null, 'Tất cả bài hát'); return; }
   if (!curId) return play(queue[0]);
   if (!auto && dir < 0 && audio.currentTime > 3) { audio.currentTime = 0; return; }
   let i = queue.indexOf(curId) + dir;
-  if (i >= queue.length) { if (settings.repeat === 'all' || !auto) i = 0; else { audio.pause(); return; } }
+  if (i >= queue.length) {
+    if (settings.repeat === 'all') i = 0;
+    else if (settings.autoplay && dir > 0) {
+      const more = autoplayTracks();
+      if (more.length) {
+        const ids = more.map(t => t.id);
+        queue.push(...ids); queueBase.push(...ids); queueCtx = 'Tự phát tiếp • theo gu của bạn';
+        if (auto) toast('Hết danh sách, tự phát tiếp bài hợp gu của bạn');
+      } else if (auto) { audio.pause(); return; } else i = 0;
+    } else if (!auto) i = 0;
+    else { audio.pause(); return; }
+  }
   if (i < 0) i = queue.length - 1;
-  play(queue[i]);
+  play(queue[i], auto);
 }
 function togglePlay() { if (!curId) return step(1); audio.paused ? audio.play() : audio.pause(); }
 function toggleShuffle() {
@@ -1844,6 +1907,9 @@ function applyBg() {
 // =====================================================================
 const setFill = el => el.style.setProperty('--p', ((el.value - el.min) / (el.max - el.min) * 100) + '%');
 audio.onplay = audio.onpause = renderPlayState;
+audio.onplaying = () => { flow.errors = 0; };
+// Bài hỏng / không đọc được → tự chuyển bài thay vì đứng im
+audio.onerror = () => { const t = tracks.find(x => x.id === curId); if (t && audio.src) skipBroken(t, "file không phát được"); };
 audio.onended = () => { if (settings.repeat === 'one') { audio.currentTime = 0; audio.play(); } else step(1, true); };
 let seeking = false;
 audio.ontimeupdate = () => {
@@ -1851,7 +1917,7 @@ audio.ontimeupdate = () => {
   for (const [cur, tot] of [['cur', 'tot'], ['cur2', 'tot2']]) { $(cur).textContent = fmt(c); $(tot).textContent = fmt(d); }
   if (!seeking && d) for (const s of [$('seek'), $('seek2')]) { s.value = c / d * 1000; setFill(s); }
   $('miniBar').style.width = d ? (c / d * 100) + '%' : 0;
-  syncLyrics(); trackListen();
+  syncLyrics(); trackListen(); flowTick();
 };
 for (const s of [$('seek'), $('seek2')]) {
   s.oninput = () => { seeking = true; setFill(s); $('cur').textContent = $('cur2').textContent = fmt(s.value / 1000 * (audio.duration || 0)); };
@@ -1947,7 +2013,20 @@ function renderAutoBtns() {
   $('autoLyrBtn').textContent = (settings.autoLyrics ? '✓ ' : '') + 'Lời bài hát: ' + (settings.autoLyrics ? 'bật' : 'tắt');
   $('autoDiscBtn').classList.toggle('primary', settings.autoDiscover);
   $('autoDiscBtn').textContent = (settings.autoDiscover ? '✓ ' : '') + 'Khám phá: ' + (settings.autoDiscover ? 'bật' : 'tắt');
+  $('autoplayBtn').classList.toggle('primary', settings.autoplay);
+  $('autoplayBtn').textContent = (settings.autoplay ? '✓ ' : '') + 'Tự phát tiếp: ' + (settings.autoplay ? 'bật' : 'tắt');
+  $('fadeBtn').classList.toggle('primary', settings.fade > 0);
+  $('fadeBtn').textContent = 'Chuyển bài mượt: ' + (settings.fade ? settings.fade + ' giây' : 'tắt');
 }
+$('autoplayBtn').onclick = () => {
+  settings.autoplay = !settings.autoplay; saveSettings(); renderAutoBtns(); renderNow();
+  toast(settings.autoplay ? 'Hết danh sách sẽ tự phát tiếp bài hợp gu' : 'Hết danh sách sẽ dừng');
+};
+$('fadeBtn').onclick = () => {
+  settings.fade = { 0: 3, 3: 6, 6: 0 }[settings.fade] ?? 0; saveSettings(); renderAutoBtns();
+  if (!settings.fade) applyVolume();
+  toast(settings.fade ? `Chuyển bài mượt ${settings.fade} giây` + (isIOS ? ' (iPhone không hỗ trợ chỉnh âm lượng nên không có tác dụng)' : '') : 'Đã tắt chuyển bài mượt');
+};
 $('autoArtBtn').onclick = () => {
   settings.autoArt = !settings.autoArt; saveSettings(); renderAutoBtns();
   if (settings.autoArt) { artQ.seen.clear(); queueArt(live()); toast('Đang tự tìm ảnh bìa cho bài còn thiếu…'); }
