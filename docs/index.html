@@ -208,6 +208,34 @@
              border: 1px solid rgba(192, 132, 252, .2); }
   .np-card .hd { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: #f0abfc; margin-bottom: 8px; letter-spacing: .04em; }
   .up-next { display: flex; flex-direction: column; gap: 2px; max-height: 150px; overflow-y: auto; }
+  /* Đĩa than xoay */
+  .vinyl-wrap { position: relative; width: min(230px, 62vw); aspect-ratio: 1; margin: 46px auto 26px; --beat: 0; }
+  .vinyl { position: absolute; inset: 0; border-radius: 50%;
+           background: radial-gradient(circle, transparent 0 30%, #0a070e 30% 31.2%, transparent 31.2%),
+                       repeating-radial-gradient(circle, #15101b 0 1.1px, #211a2a 1.1px 2.4px), #0d0a12;
+           box-shadow: 0 18px 40px rgba(0, 0, 0, .65), inset 0 0 0 3px #07050a, inset 0 0 0 6px rgba(168, 85, 247, .08);
+           animation: spin 3.6s linear infinite; animation-play-state: paused; }
+  body.is-playing .vinyl { animation-play-state: running; }
+  .vinyl-label { position: absolute; inset: 31%; border-radius: 50%; background: center / cover no-repeat; box-shadow: 0 0 0 3px rgba(0, 0, 0, .55); }
+  .vinyl-label::after { content: ""; position: absolute; left: 50%; top: 50%; width: 10%; height: 10%; transform: translate(-50%, -50%);
+                        border-radius: 50%; background: #07030e; box-shadow: 0 0 0 2px rgba(255, 255, 255, .18); }
+  .vinyl-sheen { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; mix-blend-mode: screen;
+                 background: conic-gradient(from 25deg, transparent 0 6%, rgba(255, 255, 255, .13) 11%, transparent 17% 52%, rgba(240, 171, 252, .10) 59%, transparent 65%); }
+  .vinyl-glow { position: absolute; inset: -5%; border-radius: 50%; filter: blur(12px); pointer-events: none;
+                background: radial-gradient(circle, rgba(217, 70, 239, calc(.22 + var(--beat) * .55)) 0 56%, transparent 72%);
+                transform: scale(calc(1 + var(--beat) * .09)); }
+  .tonearm { position: absolute; top: -6%; right: -4%; width: 14%; height: 74%; transform-origin: 50% 8%; transform: rotate(-30deg);
+             transition: transform .7s cubic-bezier(.3, 1.3, .5, 1); pointer-events: none; }
+  body.is-playing .tonearm { transform: rotate(-4deg); }
+  .tonearm::before { content: ""; position: absolute; left: 50%; top: 0; width: 46%; aspect-ratio: 1; transform: translateX(-50%); border-radius: 50%;
+                     background: radial-gradient(circle at 35% 35%, #f5f3ff, #a1a1aa 55%, #3f3f46); box-shadow: 0 3px 8px rgba(0, 0, 0, .5); }
+  .tonearm i { position: absolute; left: 50%; top: 10%; width: 9%; height: 80%; transform: translateX(-50%); border-radius: 9px;
+               background: linear-gradient(90deg, #71717a, #f4f4f5 45%, #a1a1aa); box-shadow: 2px 3px 8px rgba(0, 0, 0, .5); }
+  .tonearm i::after { content: ""; position: absolute; left: 50%; bottom: -6%; width: 420%; height: 13%; transform: translateX(-50%) rotate(-14deg);
+                      border-radius: 3px; background: linear-gradient(#e4e4e7, #52525b); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .vinyl { animation: none; } .tonearm { transition: none; } }
+
   /* Lời bài hát */
   .lyrics { max-height: 30vh; min-height: 90px; overflow-y: auto; scroll-behavior: smooth; padding: 4px 2px 40px; position: relative;
             -webkit-mask-image: linear-gradient(transparent, #000 12%, #000 80%, transparent); mask-image: linear-gradient(transparent, #000 12%, #000 80%, transparent); }
@@ -404,6 +432,12 @@
       <button class="dark-btn" id="npClose" title="Đóng"><svg class="i sm"><use href="#i-x"/></svg></button>
     </div>
     <div class="np-body">
+      <div class="vinyl-wrap" id="vinylWrap" aria-hidden="true">
+        <div class="vinyl-glow"></div>
+        <div class="vinyl" id="vinyl"><div class="vinyl-label" id="vinylLabel"></div></div>
+        <div class="vinyl-sheen"></div>
+        <div class="tonearm"><i></i></div>
+      </div>
       <div class="np-title">
         <div style="min-width:0"><h2 id="npTitle">Chọn một bài để bắt đầu</h2><p id="npArtist" class="t1"></p></div>
         <button class="circle-btn" id="npLike" title="Thêm vào Bài hát đã thích"><svg class="i sm"><use href="#i-heart"/></svg></button>
@@ -1347,6 +1381,8 @@ function renderNow() {
   $('npArtist').textContent = t ? t.artist : '';
   $('npCtx').textContent = t ? (queueCtx || 'Đang phát') : 'Chưa phát bài nào';
   const bg = $('npBg'); bg.classList.toggle('none', !art); bg.style.backgroundImage = art ? `url(${art})` : '';
+  $('vinylLabel').setAttribute('style', t ? coverStyle(art, t.album || t.title)
+    : 'background-image:radial-gradient(circle,#c026d3,#4c1d95)');
   for (const b of [$('pLike'), $('npLike')]) { b.classList.toggle('on', !!(t && t.liked)); b.disabled = !t; }
   // Tiếp theo
   const i = queue.indexOf(curId);
@@ -1368,8 +1404,44 @@ function renderNow() {
   if (settings.bgFromCover) applyBg();
   loadLyrics();
 }
+// ---------- Đĩa nhún theo nhịp bass (chỉ máy tính: trên điện thoại Web Audio có thể làm nhạc ngắt khi tắt màn hình) ----------
+const beat = { ctx: null, an: null, buf: null, level: 0, raf: 0 };
+const canBeat = matchMedia('(pointer: fine)').matches && !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+function startBeat() {
+  if (!canBeat) return;
+  try {
+    if (!beat.ctx) {
+      beat.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = beat.ctx.createMediaElementSource(audio);
+      beat.an = beat.ctx.createAnalyser(); beat.an.fftSize = 512; beat.an.smoothingTimeConstant = 0.6;
+      src.connect(beat.an); beat.an.connect(beat.ctx.destination);
+      beat.buf = new Uint8Array(beat.an.frequencyBinCount);
+    }
+    if (beat.ctx.state === 'suspended') beat.ctx.resume();
+  } catch (e) { console.warn('beat', e); return; }
+  cancelAnimationFrame(beat.raf);
+  const wrap = $('vinylWrap');
+  const loop = () => {
+    if (audio.paused) { beat.level *= 0.85; wrap.style.setProperty('--beat', beat.level.toFixed(3)); if (beat.level > 0.01) beat.raf = requestAnimationFrame(loop); return; }
+    beat.an.getByteFrequencyData(beat.buf);
+    let s = 0; for (let i = 1; i <= 8; i++) s += beat.buf[i];          // ~40–350 Hz: tiếng trống, bass
+    const bass = s / (8 * 255);
+    // So với khoảng dao động bass vài giây gần đây → bài to hay nhỏ đều nhún rõ đúng lúc có trống
+    beat.hi = Math.max(bass, (beat.hi ?? bass) * 0.995);
+    beat.lo = Math.min(bass, (beat.lo ?? bass) + 0.004);
+    const range = beat.hi - beat.lo;
+    const hit = range > 0.08 ? ((bass - beat.lo) / range) ** 2 : 0;
+    beat.level = Math.max(hit, beat.level * 0.85);
+    wrap.style.setProperty('--beat', beat.level.toFixed(3));
+    beat.raf = requestAnimationFrame(loop);
+  };
+  beat.raf = requestAnimationFrame(loop);
+}
+
 function renderPlayState() {
   const p = !audio.paused;
+  document.body.classList.toggle('is-playing', p);
+  if (p) startBeat();
   for (const b of [$('playBtn'), $('playBtn2')]) b.innerHTML = icon(p ? 'pause' : 'play', (b.id === 'playBtn2' ? 'lg' : 'sm') + ' fill');
   $$('.rows').forEach(r => r.classList.toggle('paused', !p));
 }
