@@ -296,9 +296,9 @@
     .brand span { display: none; }
     .hdr-center { order: 3; flex-basis: 100%; max-width: none; }
     .hdr-center .round { display: none; }
-    .grad-btn span, .chip span { display: none; }
+    .grad-btn span, .chip:not(.keep-text) span { display: none; }
     .grad-btn { width: 40px; padding: 0; justify-content: center; }
-    .chip { width: 34px; padding: 0; justify-content: center; }
+    .chip:not(.keep-text) { width: 34px; padding: 0; justify-content: center; }
     .hdr-right { margin-left: auto; }
     .workspace { padding: 0 6px 6px; }
     #lib { display: none; }
@@ -354,7 +354,7 @@
   <div class="hdr-right">
     <span id="status" class="t2"></span>
     <button class="chip warn hidden" id="permBtn" title="Cho phép đọc thư mục nhạc"><svg class="i xs"><use href="#i-lock"/></svg><span>Cho phép đọc thư mục</span></button>
-    <button class="chip warn hidden" id="reloginBtn" title="Đăng nhập thư viện chung bằng mã mời"><svg class="i xs"><use href="#i-cloud"/></svg><span>Đăng nhập thư viện chung</span></button>
+    <button class="chip warn keep-text hidden" id="reloginBtn" title="Đăng nhập thư viện chung bằng mã mời"><svg class="i xs"><use href="#i-cloud"/></svg><span>Đăng nhập</span></button>
     <label class="chip hidden" id="cloudUpBtn" title="Tải nhạc lên thư viện chung cho cả nhóm"><svg class="i xs"><use href="#i-cloud-up"/></svg><span>Tải lên chung</span>
       <input id="cloudIn" type="file" accept="audio/*,.mp3,.m4a,.flac,.wav,.ogg,.opus" multiple hidden></label>
     <button class="chip hidden" id="installBtn" title="Cài app"><svg class="i xs"><use href="#i-download"/></svg><span>Cài app</span></button>
@@ -1027,6 +1027,15 @@ function renderMain() {
   const pills = cloud.on ? [PILLS[0], ['cloud', 'Thư viện chung'], ...PILLS.slice(1)] : PILLS;
   let html = `<div class="pills"><div>${pills.map(([k, l]) => `<button class="pill ${active === k ? 'on' : ''}" data-view="${k}">${l}</button>`).join('')}</div>
     <button class="pill np-toggle" data-np>${icon('panel', 'xs')}&nbsp;Đang phát</button></div>`;
+
+  // Chưa đăng nhập thư viện chung (hoặc hết phiên) → dải nhắc nổi bật
+  if (cloud.available && !$('reloginBtn').classList.contains('hidden')) {
+    html += `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;margin-bottom:18px;border-radius:14px;
+               background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.45)">
+      ${icon('cloud', 'lg')}<div style="flex:1;min-width:180px"><b>Thư viện chung</b><div class="t2" style="white-space:normal">
+      Đăng nhập bằng mã mời để nghe và tải nhạc lên cùng mọi người. Trên iPhone, app ở màn hình chính cần đăng nhập riêng một lần.</div></div>
+      <button class="soft-btn solid primary" data-act="login" style="flex:0 0 auto">Đăng nhập</button></div>`;
+  }
 
   if (!live().length) {
     html += `<div class="empty"><h2>Thư viện đang trống</h2>
