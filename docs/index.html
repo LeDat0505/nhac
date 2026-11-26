@@ -229,7 +229,7 @@
   @media (max-width: 760px) { .mixes.rec-row { grid-auto-columns: 44%; gap: 10px; } .mix-banner { padding: 16px; } }
 
   /* Đĩa than xoay */
-  .vinyl-wrap { position: relative; width: min(230px, 62vw); aspect-ratio: 1; margin: 46px auto 26px; --beat: 0; }
+  .vinyl-wrap { position: relative; width: min(180px, 58vw); aspect-ratio: 1; margin: 48px auto 36px; }
   .vinyl { position: absolute; inset: 0; border-radius: 50%;
            background: radial-gradient(circle, transparent 0 30%, #0a070e 30% 31.2%, transparent 31.2%),
                        repeating-radial-gradient(circle, #15101b 0 1.1px, #211a2a 1.1px 2.4px), #0d0a12;
@@ -241,9 +241,8 @@
                         border-radius: 50%; background: #07030e; box-shadow: 0 0 0 2px rgba(255, 255, 255, .18); }
   .vinyl-sheen { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; mix-blend-mode: screen;
                  background: conic-gradient(from 25deg, transparent 0 6%, rgba(255, 255, 255, .13) 11%, transparent 17% 52%, rgba(240, 171, 252, .10) 59%, transparent 65%); }
-  .vinyl-glow { position: absolute; inset: -5%; border-radius: 50%; filter: blur(12px); pointer-events: none;
-                background: radial-gradient(circle, rgba(217, 70, 239, calc(.22 + var(--beat) * .55)) 0 56%, transparent 72%);
-                transform: scale(calc(1 + var(--beat) * .09)); }
+  /* Vòng sóng nhạc quanh đĩa (vẽ bằng canvas) */
+  .vinyl-viz { position: absolute; left: -19%; top: -19%; width: 138%; height: 138%; pointer-events: none; }
   .tonearm { position: absolute; top: -6%; right: -4%; width: 14%; height: 74%; transform-origin: 50% 8%; transform: rotate(-30deg);
              transition: transform .7s cubic-bezier(.3, 1.3, .5, 1); pointer-events: none; }
   body.is-playing .tonearm { transform: rotate(-4deg); }
@@ -379,6 +378,7 @@
     body.np-open .workspace { z-index: 45; }   /* khung Đang phát phủ toàn màn hình, nằm trên cả thanh dưới */
     #np .np-body { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
     .lyrics { max-height: 34vh; }
+    .vinyl-wrap { width: min(230px, 60vw); margin: 64px auto 48px; }
     .lyrics p { font-size: 17px; }
     .pills > div { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
     .pills > div::-webkit-scrollbar { display: none; }
@@ -453,7 +453,7 @@
     </div>
     <div class="np-body">
       <div class="vinyl-wrap" id="vinylWrap" aria-hidden="true">
-        <div class="vinyl-glow"></div>
+        <canvas class="vinyl-viz" id="vizCanvas"></canvas>
         <div class="vinyl" id="vinyl"><div class="vinyl-label" id="vinylLabel"></div></div>
         <div class="vinyl-sheen"></div>
         <div class="tonearm"><i></i></div>
@@ -1717,7 +1717,7 @@ function renderNow() {
   if (settings.bgFromCover) applyBg();
   loadLyrics();
 }
-// ---------- Đĩa nhún theo nhịp bass (chỉ máy tính: trên điện thoại Web Audio có thể làm nhạc ngắt khi tắt màn hình) ----------
+// ---------- Bộ phân tích âm thanh cho vòng sóng (chỉ máy tính: trên điện thoại Web Audio có thể làm nhạc ngắt khi tắt màn hình) ----------
 const beat = { ctx: null, an: null, buf: null, level: 0, raf: 0 };
 const canBeat = matchMedia('(pointer: fine)').matches && !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && !matchMedia('(prefers-reduced-motion: reduce)').matches;
 function startBeat() {
@@ -1732,23 +1732,68 @@ function startBeat() {
     }
     if (beat.ctx.state === 'suspended') beat.ctx.resume();
   } catch (e) { console.warn('beat', e); return; }
-  cancelAnimationFrame(beat.raf);
-  const wrap = $('vinylWrap');
-  const loop = () => {
-    if (audio.paused) { beat.level *= 0.85; wrap.style.setProperty('--beat', beat.level.toFixed(3)); if (beat.level > 0.01) beat.raf = requestAnimationFrame(loop); return; }
+}
+
+// ---------- Vòng sóng nhạc quanh đĩa than ----------
+// Máy tính: phân tích tần số thật từ âm thanh đang phát. Điện thoại: sóng mô phỏng nhịp nhàng (không phân tích).
+const VIZ_N = 72;                                   // số vạch quanh đĩa (đối xứng 2 nửa)
+const viz = { vals: new Float32Array(VIZ_N), raf: 0, bins: null };
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function vizVisible() {
+  const np = $('np');
+  return document.visibilityState === 'visible' && np.offsetParent !== null && getComputedStyle(np).transform === 'none' || (innerWidth > 1200 && document.visibilityState === 'visible');
+}
+function vizFrame(t) {
+  const cv = $('vizCanvas'), size = cv.clientWidth;
+  if (!size) return;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  if (cv.width !== Math.round(size * dpr)) { cv.width = cv.height = Math.round(size * dpr); }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, size, size);
+  const half = VIZ_N / 2, playing = !audio.paused;
+  // 1) lấy độ lớn cho từng vạch
+  if (playing && beat.an) {
     beat.an.getByteFrequencyData(beat.buf);
-    let s = 0; for (let i = 1; i <= 8; i++) s += beat.buf[i];          // ~40–350 Hz: tiếng trống, bass
-    const bass = s / (8 * 255);
-    // So với khoảng dao động bass vài giây gần đây → bài to hay nhỏ đều nhún rõ đúng lúc có trống
-    beat.hi = Math.max(bass, (beat.hi ?? bass) * 0.995);
-    beat.lo = Math.min(bass, (beat.lo ?? bass) + 0.004);
-    const range = beat.hi - beat.lo;
-    const hit = range > 0.08 ? ((bass - beat.lo) / range) ** 2 : 0;
-    beat.level = Math.max(hit, beat.level * 0.85);
-    wrap.style.setProperty('--beat', beat.level.toFixed(3));
-    beat.raf = requestAnimationFrame(loop);
+    if (!viz.bins) {   // chia dải tần theo thang log: vạch đầu là bass, vạch cuối là tiếng cao
+      const maxBin = Math.floor(beat.buf.length * 0.7);
+      viz.bins = Array.from({ length: half + 1 }, (_, i) => Math.max(1, Math.round(2 * Math.pow(maxBin / 2, i / half))));
+    }
+    for (let i = 0; i < half; i++) {
+      let s = 0, a = viz.bins[i], b = Math.max(a + 1, viz.bins[i + 1]);
+      for (let k = a; k < b; k++) s += beat.buf[k];
+      const v = Math.pow(s / ((b - a) * 255), 1.5) * (0.75 + i / half * 0.6);   // bù cho tiếng cao vốn nhỏ hơn
+      viz.vals[i] = Math.max(v, viz.vals[i] * 0.86);
+    }
+  } else if (playing) {   // mô phỏng: vài sóng chồng lên nhau, chạy vòng quanh đĩa
+    const s = t / 1000;
+    for (let i = 0; i < half; i++) {
+      const v = 0.28 + 0.22 * Math.sin(s * 2.1 + i * 0.45) + 0.16 * Math.sin(s * 3.7 - i * 0.9) + 0.12 * Math.sin(s * 6.3 + i * 1.7);
+      viz.vals[i] = viz.vals[i] * 0.7 + Math.max(0.05, v) * 0.3;
+    }
+  } else for (let i = 0; i < half; i++) viz.vals[i] *= 0.88;   // tạm dừng: sóng lặng dần
+  // 2) vẽ: vạch bo tròn, xuất phát ngay mép đĩa, màu hồng → tím, đối xứng trái/phải
+  const cx = size / 2, discR = size / 2 / 1.38, r0 = discR + 5, maxLen = size / 2 - r0 - 3;
+  const w = Math.max(2, (2 * Math.PI * r0 / VIZ_N) * 0.5);
+  g.lineCap = 'round'; g.lineWidth = w;
+  for (let i = 0; i < VIZ_N; i++) {
+    const k = i < half ? i : VIZ_N - 1 - i;            // gương: bass ở trên cùng, tiếng cao ở dưới
+    const v = Math.min(1, viz.vals[k]);
+    const len = 2 + v * maxLen;
+    const ang = (i / VIZ_N) * Math.PI * 2 - Math.PI / 2;
+    const c = Math.cos(ang), s2 = Math.sin(ang);
+    g.strokeStyle = `hsla(${305 - (k / half) * 45}, 90%, ${62 + v * 18}%, ${0.35 + v * 0.65})`;
+    g.beginPath(); g.moveTo(cx + c * r0, cx + s2 * r0); g.lineTo(cx + c * (r0 + len), cx + s2 * (r0 + len)); g.stroke();
+  }
+}
+function startViz() {
+  if (reduceMotion || viz.raf) return;
+  const loop = t => {
+    const quiet = audio.paused && viz.vals.every(v => v < 0.01);
+    if (vizVisible()) vizFrame(t);
+    if (quiet) { viz.raf = 0; vizFrame(t); return; }   // im hẳn thì dừng vòng vẽ cho đỡ tốn pin
+    viz.raf = requestAnimationFrame(loop);
   };
-  beat.raf = requestAnimationFrame(loop);
+  viz.raf = requestAnimationFrame(loop);
 }
 
 function renderPlayState() {
@@ -1756,6 +1801,7 @@ function renderPlayState() {
   document.body.classList.toggle('is-playing', p);
   if (p && !preview.paused) preview.pause();   // phát nhạc chính thì dừng nghe thử
   if (p) startBeat();
+  startViz();   // chạy cả khi tạm dừng để sóng lặng dần
   for (const b of [$('playBtn'), $('playBtn2')]) b.innerHTML = icon(p ? 'pause' : 'play', (b.id === 'playBtn2' ? 'lg' : 'sm') + ' fill');
   $$('.rows').forEach(r => r.classList.toggle('paused', !p));
 }

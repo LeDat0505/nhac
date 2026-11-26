@@ -1,6 +1,6 @@
 ﻿// Service worker: lÆ°u giao diá»‡n app Ä‘á»ƒ má»Ÿ Ä‘Æ°á»£c khi khĂ´ng cĂ³ máº¡ng.
 // Khi sá»­a app, tÄƒng sá»‘ phiĂªn báº£n nĂ y Ä‘á»ƒ Ä‘iá»‡n thoáº¡i táº£i báº£n má»›i.
-const VERSION = 'v16';
+const VERSION = 'v17';
 const SHELL = ['./', './index.html', './manifest.webmanifest',
                './icon-192.png', './icon-512.png', './icon-maskable.png', './apple-touch-icon.png', './favicon.png'];
 
