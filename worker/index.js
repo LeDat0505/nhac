@@ -225,14 +225,30 @@ export function scoreArt(r, t) {
 }
 // Bỏ dấu câu trong từ khóa (vd. "Vũ." làm iTunes tìm lệch); thử "ca sĩ + tên bài" rồi tới "tên bài"
 const cleanTerm = s => String(s || '').replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/[^\p{L}\p{N}\s'&]+/gu, ' ').replace(/\s+/g, ' ').trim();
+const deaccent = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
+const pickBest = (list, t) => list.map(x => ({ x, s: scoreArt(x, t) })).filter(o => o.s > 0).sort((a, b) => b.s - a.s)[0]?.x;
+// Nguồn 1: iTunes. Nguồn 2: Deezer (nhiều nhạc Việt hơn; phải tìm KHÔNG DẤU mới ra).
 export async function findArtUrl(t, fetchFn = fetch) {
   const artist = normName(t.artist) === UNKNOWN_ARTIST ? '' : cleanTerm(t.artist), title = cleanTerm(t.title);
   if (!title) return null;
-  for (const term of [...new Set([[artist, title].filter(Boolean).join(' '), title])]) {
-    const r = await fetchFn('https://itunes.apple.com/search?' + new URLSearchParams({ term, entity: 'song', limit: '15' }));
-    if (!r.ok) throw new Error('itunes ' + r.status);
-    const best = ((await r.json()).results || []).map(x => ({ x, s: scoreArt(x, t) })).filter(o => o.s > 0).sort((a, b) => b.s - a.s)[0];
-    if (best?.x.artworkUrl100) return best.x.artworkUrl100.replace(/\/\d+x\d+bb\./, '/600x600bb.');
+  const terms = [...new Set([[artist, title].filter(Boolean).join(' '), title])];
+  for (const term of terms) {
+    try {
+      const r = await fetchFn('https://itunes.apple.com/search?' + new URLSearchParams({ term, entity: 'song', limit: '15' }));
+      if (!r.ok) break;
+      const best = pickBest((await r.json()).results || [], t);
+      if (best?.artworkUrl100) return best.artworkUrl100.replace(/\/\d+x\d+bb\./, '/600x600bb.');
+    } catch { break; }
+  }
+  for (const term of [...new Set(terms.map(deaccent))]) {
+    try {
+      const r = await fetchFn('https://api.deezer.com/search?' + new URLSearchParams({ q: term, limit: '15' }));
+      if (!r.ok) break;
+      const list = ((await r.json()).data || []).map(d => ({ trackName: d.title, artistName: d.artist?.name, collectionName: d.album?.title,
+        trackTimeMillis: (d.duration || 0) * 1000, art: d.album?.cover_big || d.album?.cover_medium }));
+      const best = pickBest(list.filter(x => x.art), t);
+      if (best) return best.art;
+    } catch { break; }
   }
   return null;
 }
@@ -349,6 +365,11 @@ async function api(req, env, url) {
   if (res === 'library' && method === 'GET') return json(await listLibrary(env));
   if (res === 'discover' && method === 'POST') return discover(req, env);
   if (res === 'preview' && /^\d{1,12}$/.test(id || '') && method === 'GET') return previewUrl(id);
+  if (res === 'artsearch' && method === 'GET') {   // cho bài trong máy: trình duyệt không gọi Deezer trực tiếp được
+    const q = url.searchParams;
+    try { return json({ url: await findArtUrl({ title: clean(q.get('title')), artist: clean(q.get('artist')), album: clean(q.get('album')), duration: +q.get('duration') || 0 }) }); }
+    catch { return err(502, 'Không tìm được ảnh lúc này.'); }
+  }
   if (res === 'art' && id && ID_RE.test(id) && parts.length === 2 && method === 'POST')
     return autoArt(env, st, id, url.searchParams.get('cached') === '1');
   if (res === 'lyrics' && id && ID_RE.test(id) && parts.length === 2) {

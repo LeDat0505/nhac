@@ -1307,12 +1307,16 @@ async function fetchArt(t) {
     if (it) { it.cover = true; it.coverSize = r.coverSize || it.coverSize; cloud.totalBytes += r.coverSize || 0; }
     t.cover = true; await saveCloudLib();
   } else {
-    const mark = await metaGet('art:' + t.id);
+    const mark = await metaGet('art2:' + t.id);
     if (mark && Date.now() - mark.at < 7 * 86400e3) return;   // đã tìm mà không thấy → 7 ngày sau thử lại
-    const url = await findArtUrl(t);
+    let url = null;
+    try { url = await findArtUrl(t); } catch { }
+    if (!url && cloud.on) {   // iTunes không có → nhờ máy chủ tìm thêm trên Deezer (nhiều nhạc Việt hơn)
+      try { url = (await apiFetch('artsearch?' + new URLSearchParams({ title: t.title, artist: t.artist, album: t.album || '', duration: Math.round(t.duration || 0) }))).url; } catch { }
+    }
     const img = url ? await fetch(url) : null;
     const blob = img && img.ok ? await img.blob() : null;
-    if (!blob || !/^image\//.test(blob.type) || blob.size > 3 * 1024 * 1024) { await metaSet('art:' + t.id, { none: true, at: Date.now() }); return; }
+    if (!blob || !/^image\//.test(blob.type) || blob.size > 3 * 1024 * 1024) { await metaSet('art2:' + t.id, { none: true, at: Date.now() }); return; }
     t.picture = blob; t.artSrc = 'itunes';
     await dbPut(t); artUrls.delete(t.id);
   }
