@@ -257,7 +257,7 @@ async function autoArt(env, st, id, cachedOnly) {
   const { metadata: meta } = await env.INDEX.getWithMetadata('song:' + id);
   if (!meta) return err(404, 'Không tìm thấy.');
   if (meta.cs) return json({ cover: true });
-  const mark = await env.INDEX.get('art:' + id, 'json');
+  const mark = await env.INDEX.get('art2:' + id, 'json');
   if (mark || cachedOnly) return json({ none: true });
   let url = null;
   try { url = await findArtUrl({ title: meta.t, artist: meta.a, album: meta.al, duration: meta.d }); }
@@ -272,7 +272,7 @@ async function autoArt(env, st, id, cachedOnly) {
       return json({ cover: true, coverSize: buf.byteLength, src: 'itunes' });
     }
   }
-  await env.INDEX.put('art:' + id, JSON.stringify({ none: true, at: Date.now() }), { expirationTtl: 7 * 86400 });
+  await env.INDEX.put('art2:' + id, JSON.stringify({ none: true, at: Date.now() }), { expirationTtl: 7 * 86400 });
   return json({ none: true });
 }
 
@@ -336,6 +336,7 @@ async function deleteSong(env, st, id, user) {
   await env.INDEX.delete('song:' + id);
   await env.INDEX.delete('lyr:' + id);
   await env.INDEX.delete('art:' + id);
+  await env.INDEX.delete('art2:' + id);
   await st.del('songs/' + id);
   if (meta.cs) await st.del('covers/' + id);
   return json({ ok: true });
