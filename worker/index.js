@@ -204,12 +204,69 @@ async function putLyrics(req, env, id, user) {
   return json(data);
 }
 
+// ---------- Ảnh bìa tự tìm (iTunes Search) — lưu lên B2 một lần cho cả nhóm ----------
+const normName = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd')
+  .replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/\b(feat|ft)\b.*$/, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+const UNKNOWN_ARTIST = 'khong ro ca si';
+// Chấm điểm một kết quả iTunes so với bài hát (title, artist, album, duration giây)
+export function scoreArt(r, t) {
+  const rt = normName(r.trackName), tt = normName(t.title), ra = normName(r.artistName), ta = normName(t.artist);
+  const titleOk = rt && tt && (rt === tt ? 3 : (rt.includes(tt) || tt.includes(rt)) ? 2 : 0);
+  if (!titleOk) return 0;
+  const artistKnown = ta && ta !== UNKNOWN_ARTIST;
+  const artistOk = artistKnown && (ra.includes(ta) || ta.includes(ra));
+  const dur = r.trackTimeMillis ? Math.abs(r.trackTimeMillis / 1000 - (t.duration || 0)) : 99;
+  const durOk = t.duration && dur <= 5;
+  if (!artistOk && !durOk) return 0;                  // không chắc là đúng bài → bỏ
+  if (artistKnown && !artistOk) return 0;             // biết ca sĩ mà không khớp → bỏ
+  let s = titleOk + (artistOk ? 2 : 0) + (durOk ? 1 : 0) - (t.duration && dur > 20 ? 2 : 0);
+  if (t.album && normName(r.collectionName) === normName(t.album)) s += 2;
+  return s;
+}
+// Bỏ dấu câu trong từ khóa (vd. "Vũ." làm iTunes tìm lệch); thử "ca sĩ + tên bài" rồi tới "tên bài"
+const cleanTerm = s => String(s || '').replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/[^\p{L}\p{N}\s'&]+/gu, ' ').replace(/\s+/g, ' ').trim();
+export async function findArtUrl(t, fetchFn = fetch) {
+  const artist = normName(t.artist) === UNKNOWN_ARTIST ? '' : cleanTerm(t.artist), title = cleanTerm(t.title);
+  if (!title) return null;
+  for (const term of [...new Set([[artist, title].filter(Boolean).join(' '), title])]) {
+    const r = await fetchFn('https://itunes.apple.com/search?' + new URLSearchParams({ term, entity: 'song', limit: '15' }));
+    if (!r.ok) throw new Error('itunes ' + r.status);
+    const best = ((await r.json()).results || []).map(x => ({ x, s: scoreArt(x, t) })).filter(o => o.s > 0).sort((a, b) => b.s - a.s)[0];
+    if (best?.x.artworkUrl100) return best.x.artworkUrl100.replace(/\/\d+x\d+bb\./, '/600x600bb.');
+  }
+  return null;
+}
+
+async function autoArt(env, st, id, cachedOnly) {
+  const { metadata: meta } = await env.INDEX.getWithMetadata('song:' + id);
+  if (!meta) return err(404, 'Không tìm thấy.');
+  if (meta.cs) return json({ cover: true });
+  const mark = await env.INDEX.get('art:' + id, 'json');
+  if (mark || cachedOnly) return json({ none: true });
+  let url = null;
+  try { url = await findArtUrl({ title: meta.t, artist: meta.a, album: meta.al, duration: meta.d }); }
+  catch { return err(502, 'Không kết nối được kho ảnh bìa.'); }
+  if (url) {
+    const img = await fetch(url);
+    const type = img.headers.get('content-type') || '';
+    const buf = img.ok && /^image\/(jpeg|png|webp)$/.test(type) ? await img.arrayBuffer() : null;
+    if (buf && buf.byteLength > 0 && buf.byteLength <= MAX_COVER) {
+      await st.put('covers/' + id, buf, buf.byteLength, type);
+      await env.INDEX.put('song:' + id, '', { metadata: { ...meta, cs: buf.byteLength, art: 'itunes' } });
+      return json({ cover: true, coverSize: buf.byteLength, src: 'itunes' });
+    }
+  }
+  await env.INDEX.put('art:' + id, JSON.stringify({ none: true, at: Date.now() }), { expirationTtl: 7 * 86400 });
+  return json({ none: true });
+}
+
 async function deleteSong(env, st, id, user) {
   const meta = (await env.INDEX.getWithMetadata('song:' + id)).metadata;
   if (!meta) return err(404, 'Không tìm thấy.');
   if (meta.by !== user.name && !user.owner) return err(403, 'Chỉ người tải lên hoặc chủ thư viện mới xóa được.');
   await env.INDEX.delete('song:' + id);
   await env.INDEX.delete('lyr:' + id);
+  await env.INDEX.delete('art:' + id);
   await st.del('songs/' + id);
   if (meta.cs) await st.del('covers/' + id);
   return json({ ok: true });
@@ -237,6 +294,8 @@ async function api(req, env, url) {
   const st = env.TEST_STORE || b2Store(env);
   if (res === 'me' && method === 'GET') return json(user);
   if (res === 'library' && method === 'GET') return json(await listLibrary(env));
+  if (res === 'art' && id && ID_RE.test(id) && parts.length === 2 && method === 'POST')
+    return autoArt(env, st, id, url.searchParams.get('cached') === '1');
   if (res === 'lyrics' && id && ID_RE.test(id) && parts.length === 2) {
     if (method === 'GET') return getLyrics(env, id, url.searchParams.get('cached') === '1');
     if (method === 'PUT') return putLyrics(req, env, id, user);
