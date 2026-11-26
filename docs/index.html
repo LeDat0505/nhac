@@ -539,7 +539,7 @@
     <button class="soft-btn solid" id="autoLyrBtn" title="Tìm lời bài hát trên LRCLIB cho bài chưa có lời">Lời bài hát</button>
     <button class="soft-btn solid" id="autoDiscBtn" title="Gợi ý bài mới qua Deezer dựa trên ca sĩ bạn hay nghe">Khám phá</button>
   </div>
-  <p class="hint" style="margin-top:-12px">Khi bật, tên bài và ca sĩ được gửi tới iTunes (ảnh bìa), LRCLIB (lời) và Deezer (khám phá) để tìm. Không gửi file nhạc hay lịch sử nghe.</p>
+  <p class="hint" style="margin-top:-12px">Khi bật, tên bài và ca sĩ được gửi tới iTunes (ảnh bìa), LRCLIB (lời) và Deezer + iTunes (khám phá) để tìm. Không gửi file nhạc hay lịch sử nghe.</p>
   <span class="lbl">4. Phát nhạc</span>
   <div class="row-btns">
     <button class="soft-btn solid" id="autoplayBtn" title="Hết danh sách thì tự nối thêm bài hợp gu thay vì dừng">Tự phát tiếp</button>
@@ -1263,15 +1263,39 @@ function scoreArt(r, t) {   // giống hệt bản trên máy chủ (worker/inde
 }
 // Bỏ dấu câu trong từ khóa (vd. "Vũ." làm iTunes tìm lệch); thử "ca sĩ + tên bài" rồi tới "tên bài"
 const cleanTerm = s => String(s || '').replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/[^\p{L}\p{N}\s'&]+/gu, ' ').replace(/\s+/g, ' ').trim();
+const deaccent = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
+const pickBest = (list, t) => list.map(x => ({ x, s: scoreArt(x, t) })).filter(o => o.s > 0).sort((a, b) => b.s - a.s)[0]?.x;
+async function itunesSearch(term, country, limit = 15) {
+  const p = new URLSearchParams({ term, entity: 'song', limit: String(limit) });
+  if (country) p.set('country', country);
+  const r = await fetch('https://itunes.apple.com/search?' + p);
+  if (!r.ok) throw new Error('itunes ' + r.status);
+  return (await r.json()).results || [];
+}
+// App tự tìm (dùng IP của chính người dùng — máy chủ Cloudflare bị iTunes/MusicBrainz giới hạn):
+//   1) iTunes kho Mỹ  2) iTunes kho Việt Nam, tìm KHÔNG DẤU  3) MusicBrainz + Cover Art Archive
 async function findArtUrl(t) {
   const artist = normName(t.artist) === UNKNOWN_ARTIST ? '' : cleanTerm(t.artist), title = cleanTerm(t.title);
   if (!title) return null;
-  for (const term of [...new Set([[artist, title].filter(Boolean).join(' '), title])]) {
-    const r = await fetch('https://itunes.apple.com/search?' + new URLSearchParams({ term, entity: 'song', limit: '15' }));
-    if (!r.ok) throw new Error('itunes ' + r.status);
-    const best = ((await r.json()).results || []).map(x => ({ x, s: scoreArt(x, t) })).filter(o => o.s > 0).sort((a, b) => b.s - a.s)[0];
-    if (best?.x.artworkUrl100) return best.x.artworkUrl100.replace(/\/\d+x\d+bb\./, '/600x600bb.');
+  const terms = [...new Set([[artist, title].filter(Boolean).join(' '), title])];
+  const tries = [...terms.map(x => [x, '']), ...[...new Set(terms.map(deaccent))].map(x => [x, 'VN'])];
+  for (const [term, country] of tries) {
+    try { const best = pickBest(await itunesSearch(term, country), t); if (best?.artworkUrl100) return best.artworkUrl100.replace(/\/\d+x\d+bb\./, '/600x600bb.'); }
+    catch { break; }   // iTunes đang giới hạn → sang nguồn khác
   }
+  try {
+    const q = `recording:"${title.replace(/"/g, '')}"` + (artist ? ` AND artist:"${artist.replace(/"/g, '')}"` : '');
+    const r = await fetch('https://musicbrainz.org/ws/2/recording?' + new URLSearchParams({ query: q, fmt: 'json', limit: '5' }));
+    if (!r.ok) return null;
+    const recs = ((await r.json()).recordings || []).map(x => ({ trackName: x.title, artistName: (x['artist-credit'] || []).map(a => a.name).join(', '),
+      trackTimeMillis: x.length || 0, collectionName: x.releases?.[0]?.title, releases: (x.releases || []).map(rel => rel.id) }));
+    const best = pickBest(recs, t);
+    for (const rel of (best?.releases || []).slice(0, 3)) {
+      const u = `https://coverartarchive.org/release/${rel}/front-500`;
+      const c = await fetch(u, { method: 'HEAD' });
+      if (c.ok) return u;
+    }
+  } catch { }
   return null;
 }
 const artQ = { queue: [], busy: false, seen: new Set(), redraw: 0 };
@@ -1299,25 +1323,24 @@ async function pumpArt() {
   } finally { artQ.busy = false; }
 }
 async function fetchArt(t) {
+  const mark = await metaGet('art3:' + t.id);
+  if (mark && Date.now() - mark.at < 7 * 86400e3) return;   // đã tìm mà không thấy → 7 ngày sau thử lại
+  const miss = () => metaSet('art3:' + t.id, { none: true, at: Date.now() });
   if (t.cloud) {
     if (!cloud.on) return;
-    const r = await apiFetch('art/' + t.sid, { method: 'POST' });
-    if (!r.cover) return;
+    const url = await findArtUrl(t);
+    if (!url) return miss();
+    const r = await apiFetch('art/' + t.sid, { method: 'POST', body: JSON.stringify({ url }), headers: { 'content-type': 'application/json' } }).catch(() => null);
+    if (!r?.cover) return miss();
     const it = cloud.items.find(i => i.id === t.sid);
     if (it) { it.cover = true; it.coverSize = r.coverSize || it.coverSize; cloud.totalBytes += r.coverSize || 0; }
     t.cover = true; await saveCloudLib();
   } else {
-    const mark = await metaGet('art2:' + t.id);
-    if (mark && Date.now() - mark.at < 7 * 86400e3) return;   // đã tìm mà không thấy → 7 ngày sau thử lại
-    let url = null;
-    try { url = await findArtUrl(t); } catch { }
-    if (!url && cloud.on) {   // iTunes không có → nhờ máy chủ tìm thêm trên Deezer (nhiều nhạc Việt hơn)
-      try { url = (await apiFetch('artsearch?' + new URLSearchParams({ title: t.title, artist: t.artist, album: t.album || '', duration: Math.round(t.duration || 0) }))).url; } catch { }
-    }
+    const url = await findArtUrl(t);
     const img = url ? await fetch(url) : null;
     const blob = img && img.ok ? await img.blob() : null;
-    if (!blob || !/^image\//.test(blob.type) || blob.size > 3 * 1024 * 1024) { await metaSet('art2:' + t.id, { none: true, at: Date.now() }); return; }
-    t.picture = blob; t.artSrc = 'itunes';
+    if (!blob || !/^image\//.test(blob.type) || blob.size > 3 * 1024 * 1024) { await miss(); return; }
+    t.picture = blob; t.artSrc = url.includes('coverartarchive') ? 'coverart' : 'itunes';
     await dbPut(t); artUrls.delete(t.id);
   }
   // vẽ lại (gộp nhiều lần cập nhật để không giật)
@@ -1421,17 +1444,34 @@ async function loadDiscover(refresh) {
   const seedsKey = seeds.map(normName).sort().join('|');
   if (!refresh && seedsKey === disc.seedsKey && Date.now() - disc.at < 6 * 3600e3) return;
   if (!refresh && !disc.items.length) {   // dùng tạm danh sách đã lưu trên máy
-    const saved = await metaGet('disc');
+    const saved = await metaGet('disc3');
     if (saved && saved.seedsKey === seedsKey && Date.now() - saved.at < 6 * 3600e3) { Object.assign(disc, saved); if (view.type === 'home') renderMain(); return; }
   }
   disc.loading = true; disc.err = ''; if (view.type === 'home') renderMain();
   try {
+    // 1) Máy chủ cho danh sách ca sĩ (chính ca sĩ bạn thích + ca sĩ tương tự trên Deezer)
     const r = await apiFetch('discover', { method: 'POST', body: JSON.stringify({ artists: seeds, refresh: !!refresh }), headers: { 'content-type': 'application/json' } });
-    const have = libKeys();
-    const items = r.items.filter(i => !have.has(normName(i.title) + '|' + normName(i.artist)));
+    // 2) App tự lấy bài nổi bật + đoạn nghe thử 30 giây từ iTunes kho Việt Nam (dùng IP của chính bạn)
+    const have = libKeys(), dup = new Set(), items = [];
+    for (const a of (r.artists || []).slice(0, 12)) {
+      let list = [];
+      try { list = await itunesSearch(deaccent(a.name), 'VN', 12); } catch { break; }   // iTunes đang giới hạn → dùng phần đã có
+      let n = 0;
+      for (const x of list) {
+        const an = normName(x.artistName), bn = normName(a.name);
+        if (!x.previewUrl || !an || !(an.includes(bn) || bn.includes(an))) continue;
+        const k = normName(x.trackName) + '|' + an;
+        if (dup.has(k) || have.has(normName(x.trackName) + '|' + normName(x.artistName)) || n >= (a.own ? 3 : 2)) continue;
+        dup.add(k); n++;
+        items.push({ it: x.trackId, title: x.trackName, artist: x.artistName, album: x.collectionName || '', preview: x.previewUrl,
+                     cover: (x.artworkUrl100 || '').replace(/\/\d+x\d+bb\./, '/300x300bb.'), link: x.trackViewUrl || '', because: a.because, own: !!a.own });
+      }
+      await sleep(400);   // nhẹ nhàng với iTunes
+    }
+    if (!items.length) throw new Error('chưa tìm được bài nào, thử lại sau');
     for (let i = items.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [items[i], items[j]] = [items[j], items[i]]; }
     Object.assign(disc, { items: items.slice(0, 16), seedsKey, at: Date.now() });
-    await metaSet('disc', { items: disc.items, seedsKey, at: disc.at });
+    await metaSet('disc3', { items: disc.items, seedsKey, at: disc.at });
   } catch (e) { disc.err = e.message; Object.assign(disc, { seedsKey, at: Date.now() - 6 * 3600e3 + 10 * 60e3 }); }   // lỗi → 10 phút sau mới thử lại
   finally { disc.loading = false; if (view.type === 'home') renderMain(); }
 }
@@ -1444,9 +1484,9 @@ function discoverHTML() {
   if (!disc.items.length) return `<section>${head}<p class="t2">${disc.loading ? 'Đang tìm bài mới theo gu của bạn…'
       : disc.err ? 'Không tải được gợi ý: ' + esc(disc.err) : 'Nghe thêm vài bài để app hiểu gu của bạn.'}</p></section>`;
   return `<section>${head}<div class="mixes rec-row">${disc.items.map(d => {
-    const on = disc.playing === d.dz && !preview.paused;
+    const on = disc.playing === d.it && !preview.paused;
     const q = encodeURIComponent(d.artist + ' ' + d.title);
-    return `<div class="mix disc-card ${on ? 'on' : ''}" data-disc="${d.dz}" role="button" tabindex="0" title="Nghe thử 30 giây">
+    return `<div class="mix disc-card ${on ? 'on' : ''}" data-disc="${d.it}" role="button" tabindex="0" title="Nghe thử 30 giây">
       <div class="art"><div class="cover" style="${d.cover ? `background-image:url(${esc(d.cover)})` : coverStyle(null, d.title)}"></div>
         <span class="disc-play">${icon(on ? 'pause' : 'play', 'sm fill')}</span><span class="disc-badge">30s</span></div>
       <div class="t1" style="font-family:var(--display);font-weight:700">${esc(d.title)}</div>
@@ -1454,16 +1494,18 @@ function discoverHTML() {
       <div class="t2 disc-why">${d.own ? 'Bài khác của ' : 'Giống '}${esc(d.because)}</div>
       <div class="disc-links"><a href="https://www.youtube.com/results?search_query=${q}" target="_blank" rel="noopener">YouTube</a>
         <a href="https://open.spotify.com/search/${q}" target="_blank" rel="noopener">Spotify</a></div></div>`;
-  }).join('')}</div><p class="hint" style="margin-top:10px">Nghe thử do Deezer cung cấp. Thích bài nào thì mở YouTube/Spotify để nghe đủ.</p></section>`;
+  }).join('')}</div><p class="hint" style="margin-top:10px">Nghe thử 30 giây do Apple (iTunes) cung cấp, ca sĩ tương tự lấy từ Deezer. Thích bài nào thì mở YouTube/Spotify để nghe đủ.</p></section>`;
 }
-async function togglePreview(dz) {
-  if (disc.playing === dz && !preview.paused) { preview.pause(); return; }
+async function togglePreview(id) {
+  if (disc.playing === id && !preview.paused) { preview.pause(); return; }
+  const d = disc.items.find(x => x.it === id);
+  if (!d?.preview) return toast('Bài này không có đoạn nghe thử.');
   try {
-    const { preview: url } = await apiFetch('preview/' + dz);   // link nghe thử hết hạn nhanh → luôn xin link mới
     if (!audio.paused) audio.pause();
-    preview.src = url; preview.volume = settings.muted ? 0 : settings.volume;
-    disc.playing = dz; await preview.play();
-  } catch (e) { disc.playing = null; toast('Không nghe thử được: ' + e.message); }
+    if (disc.playing !== id) preview.src = d.preview;
+    preview.volume = settings.muted ? 0 : settings.volume;
+    disc.playing = id; await preview.play();
+  } catch (e) { disc.playing = null; toast('Không nghe thử được: ' + (e.message || 'lỗi phát')); }
   renderDiscState();
 }
 function renderDiscState() {

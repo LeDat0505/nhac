@@ -227,58 +227,68 @@ export function scoreArt(r, t) {
 const cleanTerm = s => String(s || '').replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/[^\p{L}\p{N}\s'&]+/gu, ' ').replace(/\s+/g, ' ').trim();
 const deaccent = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
 const pickBest = (list, t) => list.map(x => ({ x, s: scoreArt(x, t) })).filter(o => o.s > 0).sort((a, b) => b.s - a.s)[0]?.x;
-// Nguồn 1: iTunes. Nguồn 2: Deezer (nhiều nhạc Việt hơn; phải tìm KHÔNG DẤU mới ra).
+// Nguồn ảnh (đều gọi được từ máy chủ Cloudflare — Deezer thì KHÔNG, vì Deezer chặn bài hát theo khu vực):
+//   1) iTunes kho Mỹ   2) iTunes kho Việt Nam, tìm KHÔNG DẤU (ra nhạc Việt tốt hơn)   3) MusicBrainz + Cover Art Archive
+const MB_UA = 'nhac-app/1.0 (ung dung nghe nhac ca nhan)';
+async function itunesSearch(term, country, fetchFn, limit = 15) {
+  const p = new URLSearchParams({ term, entity: 'song', limit: String(limit) });
+  if (country) p.set('country', country);
+  const r = await fetchFn('https://itunes.apple.com/search?' + p);
+  if (!r.ok) throw new Error('itunes ' + r.status);
+  return (await r.json()).results || [];
+}
+const itunesArt = x => x?.artworkUrl100 ? x.artworkUrl100.replace(/\/\d+x\d+bb\./, '/600x600bb.') : null;
 export async function findArtUrl(t, fetchFn = fetch) {
   const artist = normName(t.artist) === UNKNOWN_ARTIST ? '' : cleanTerm(t.artist), title = cleanTerm(t.title);
   if (!title) return null;
   const terms = [...new Set([[artist, title].filter(Boolean).join(' '), title])];
-  for (const term of terms) {
-    try {
-      const r = await fetchFn('https://itunes.apple.com/search?' + new URLSearchParams({ term, entity: 'song', limit: '15' }));
-      if (!r.ok) break;
-      const best = pickBest((await r.json()).results || [], t);
-      if (best?.artworkUrl100) return best.artworkUrl100.replace(/\/\d+x\d+bb\./, '/600x600bb.');
-    } catch { break; }
+  const tries = [...terms.map(term => [term, '']), ...[...new Set(terms.map(deaccent))].map(term => [term, 'VN'])];
+  for (const [term, country] of tries) {
+    try { const best = pickBest(await itunesSearch(term, country, fetchFn), t); if (best) return itunesArt(best); }
+    catch { break; }
   }
-  for (const term of [...new Set(terms.map(deaccent))]) {
-    try {
-      const r = await fetchFn('https://api.deezer.com/search?' + new URLSearchParams({ q: term, limit: '15' }));
-      if (!r.ok) break;
-      const list = ((await r.json()).data || []).map(d => ({ trackName: d.title, artistName: d.artist?.name, collectionName: d.album?.title,
-        trackTimeMillis: (d.duration || 0) * 1000, art: d.album?.cover_big || d.album?.cover_medium }));
-      const best = pickBest(list.filter(x => x.art), t);
-      if (best) return best.art;
-    } catch { break; }
-  }
+  // MusicBrainz: tìm bản thu → các bản phát hành → ảnh bìa trên Cover Art Archive
+  try {
+    const q = `recording:"${title.replace(/"/g, '')}"` + (artist ? ` AND artist:"${artist.replace(/"/g, '')}"` : '');
+    const r = await fetchFn('https://musicbrainz.org/ws/2/recording?' + new URLSearchParams({ query: q, fmt: 'json', limit: '5' }), { headers: { 'user-agent': MB_UA } });
+    if (!r.ok) return null;
+    const recs = ((await r.json()).recordings || []).map(x => ({ trackName: x.title, artistName: (x['artist-credit'] || []).map(a => a.name).join(', '),
+      trackTimeMillis: x.length || 0, collectionName: x.releases?.[0]?.title, releases: (x.releases || []).map(rel => rel.id) }));
+    const best = pickBest(recs, t);
+    for (const rel of (best?.releases || []).slice(0, 3)) {
+      const c = await fetchFn(`https://coverartarchive.org/release/${rel}/front-500`, { method: 'HEAD', redirect: 'follow' });
+      if (c.ok) return `https://coverartarchive.org/release/${rel}/front-500`;
+    }
+  } catch { }
   return null;
 }
 
-async function autoArt(env, st, id, cachedOnly) {
+// App (trên máy người dùng) tự tìm ảnh — iTunes/MusicBrainz chặn bớt khi gọi từ IP dùng chung của Cloudflare —
+// rồi gửi link ảnh lên đây; máy chủ tải ảnh về và lưu lên B2 một lần cho cả nhóm.
+const ART_HOSTS = /^(is\d+-ssl\.mzstatic\.com|coverartarchive\.org|([a-z0-9-]+\.)*archive\.org|[a-z0-9-]+\.dzcdn\.net)$/;
+async function saveArt(req, env, st, id) {
   const { metadata: meta } = await env.INDEX.getWithMetadata('song:' + id);
   if (!meta) return err(404, 'Không tìm thấy.');
   if (meta.cs) return json({ cover: true });
-  const mark = await env.INDEX.get('art2:' + id, 'json');
-  if (mark || cachedOnly) return json({ none: true });
-  let url = null;
-  try { url = await findArtUrl({ title: meta.t, artist: meta.a, album: meta.al, duration: meta.d }); }
-  catch { return err(502, 'Không kết nối được kho ảnh bìa.'); }
-  if (url) {
-    const img = await fetch(url);
-    const type = img.headers.get('content-type') || '';
-    const buf = img.ok && /^image\/(jpeg|png|webp)$/.test(type) ? await img.arrayBuffer() : null;
-    if (buf && buf.byteLength > 0 && buf.byteLength <= MAX_COVER) {
-      await st.put('covers/' + id, buf, buf.byteLength, type);
-      await env.INDEX.put('song:' + id, '', { metadata: { ...meta, cs: buf.byteLength, art: 'itunes' } });
-      return json({ cover: true, coverSize: buf.byteLength, src: 'itunes' });
-    }
-  }
-  await env.INDEX.put('art2:' + id, JSON.stringify({ none: true, at: Date.now() }), { expirationTtl: 7 * 86400 });
-  return json({ none: true });
+  let src = '';
+  try { src = String((await req.json()).url || ''); } catch { }
+  let u;
+  try { u = new URL(src); } catch { return json({ none: true }); }
+  if (u.protocol !== 'https:' || !ART_HOSTS.test(u.hostname)) return err(400, 'Nguồn ảnh không được phép.');
+  const img = await fetch(u.href, { redirect: 'follow' });
+  const finalHost = new URL(img.url || u.href).hostname;
+  if (!ART_HOSTS.test(finalHost)) return err(400, 'Nguồn ảnh không được phép.');
+  const type = (img.headers.get('content-type') || '').split(';')[0];
+  const buf = img.ok && /^image\/(jpeg|png|webp)$/.test(type) ? await img.arrayBuffer() : null;
+  if (!buf || !buf.byteLength || buf.byteLength > MAX_COVER) return err(422, 'Không tải được ảnh bìa.');
+  await st.put('covers/' + id, buf, buf.byteLength, type);
+  await env.INDEX.put('song:' + id, '', { metadata: { ...meta, cs: buf.byteLength, art: u.hostname.includes('mzstatic') ? 'itunes' : 'coverart' } });
+  return json({ cover: true, coverSize: buf.byteLength });
 }
 
-// ---------- Khám phá bài mới (Deezer: ca sĩ tương tự + bài nổi bật, nghe thử 30 giây) ----------
+// ---------- Khám phá bài mới: ca sĩ tương tự (Deezer) + bài nổi bật và nghe thử 30 giây (iTunes) ----------
 // Deezer không cho trình duyệt gọi trực tiếp (không có CORS) nên đi qua đây.
-// Link nghe thử của Deezer hết hạn sau ~15 phút → không lưu link, app xin link mới qua /api/preview/<id>.
+// Từ Cloudflare, Deezer chỉ trả được phần ca sĩ (tìm ca sĩ, ca sĩ tương tự); bài hát lấy từ iTunes.
 async function deezer(path) {
   const r = await fetch('https://api.deezer.com/' + path);
   if (!r.ok) throw new Error('deezer ' + r.status);
@@ -290,8 +300,8 @@ async function discover(req, env) {
   let body = {};
   try { body = await req.json(); } catch { return err(400, 'Dữ liệu không hợp lệ.'); }
   const seeds = [...new Set((body.artists || []).map(a => clean(a, 80)).filter(a => a && normName(a) !== UNKNOWN_ARTIST))].slice(0, 4);
-  if (!seeds.length) return json({ items: [], at: Date.now() });
-  const key = 'disc:' + (await sha256(seeds.map(normName).sort().join('|'))).slice(0, 32);
+  if (!seeds.length) return json({ artists: [], at: Date.now() });
+  const key = 'disc3:' + (await sha256(seeds.map(normName).sort().join('|'))).slice(0, 32);
   if (!body.refresh) { const saved = await env.INDEX.get(key, 'json'); if (saved) return json(saved); }
   let found;
   try {
@@ -309,24 +319,11 @@ async function discover(req, env) {
     try { for (const r of ((await deezer(`artist/${s.id}/related?limit=6`)).data || []).slice(0, 5)) pool.push({ id: r.id, name: r.name, because: s.name }); } catch { }
   }
   const seen = new Set();
-  const artistsToUse = pool.filter(p => !seen.has(p.id) && seen.add(p.id)).slice(0, 16);
-  // 3) bài nổi bật của họ (bài khác của chính ca sĩ bạn thích + của ca sĩ tương tự)
-  const tops = await Promise.all(artistsToUse.map(p => deezer(`artist/${p.id}/top?limit=${p.own ? 4 : 2}`).then(j => ({ p, list: j.data || [] })).catch(() => ({ p, list: [] }))));
-  const items = [];
-  for (const { p, list } of tops) for (const t of list) {
-    if (t.readable === false || !t.preview) continue;
-    items.push({ dz: t.id, title: t.title_short || t.title, artist: t.artist?.name || p.name, album: t.album?.title || '',
-                 cover: t.album?.cover_medium || '', link: t.link || '', duration: t.duration || 0, because: p.because, own: !!p.own });
-  }
-  const data = { items, at: Date.now() };
-  await env.INDEX.put(key, JSON.stringify(data), { expirationTtl: 6 * 3600 });
+  // Chỉ trả danh sách ca sĩ; app tự lấy bài + nghe thử 30 giây từ iTunes (iTunes giới hạn IP dùng chung của Cloudflare)
+  const artists = pool.filter(p => !seen.has(p.id) && seen.add(p.id)).slice(0, 14).map(p => ({ name: p.name, because: p.because, own: !!p.own }));
+  const data = { artists, at: Date.now() };
+  if (artists.length) await env.INDEX.put(key, JSON.stringify(data), { expirationTtl: 24 * 3600 });
   return json(data);
-}
-async function previewUrl(dzId) {
-  try {
-    const t = await deezer('track/' + dzId);
-    return t.preview ? json({ preview: t.preview }) : err(404, 'Bài này không có đoạn nghe thử.');
-  } catch { return err(502, 'Không kết nối được Deezer.'); }
 }
 
 async function deleteSong(env, st, id, user) {
@@ -365,14 +362,9 @@ async function api(req, env, url) {
   if (res === 'me' && method === 'GET') return json(user);
   if (res === 'library' && method === 'GET') return json(await listLibrary(env));
   if (res === 'discover' && method === 'POST') return discover(req, env);
-  if (res === 'preview' && /^\d{1,12}$/.test(id || '') && method === 'GET') return previewUrl(id);
-  if (res === 'artsearch' && method === 'GET') {   // cho bài trong máy: trình duyệt không gọi Deezer trực tiếp được
-    const q = url.searchParams;
-    try { return json({ url: await findArtUrl({ title: clean(q.get('title')), artist: clean(q.get('artist')), album: clean(q.get('album')), duration: +q.get('duration') || 0 }) }); }
-    catch { return err(502, 'Không tìm được ảnh lúc này.'); }
-  }
+  if (res === 'preview') return err(410, 'Hãy tải lại app để dùng bản mới.');   // bản cũ dùng link Deezer (đã bỏ)
   if (res === 'art' && id && ID_RE.test(id) && parts.length === 2 && method === 'POST')
-    return autoArt(env, st, id, url.searchParams.get('cached') === '1');
+    return saveArt(req, env, st, id);
   if (res === 'lyrics' && id && ID_RE.test(id) && parts.length === 2) {
     if (method === 'GET') return getLyrics(env, id, url.searchParams.get('cached') === '1');
     if (method === 'PUT') return putLyrics(req, env, id, user);
