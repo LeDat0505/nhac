@@ -9,7 +9,7 @@
   if (!location.pathname.endsWith('/') && !/\.[a-z0-9]+$/i.test(location.pathname))
     location.replace(location.pathname + '/' + location.search + location.hash);
 </script>
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
 <link rel="icon" href="favicon.png" sizes="48x48">
 <link rel="icon" href="icon-192.png" sizes="192x192">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -354,6 +354,9 @@
   <div class="hdr-right">
     <span id="status" class="t2"></span>
     <button class="chip warn hidden" id="permBtn" title="Cho phép đọc thư mục nhạc"><svg class="i xs"><use href="#i-lock"/></svg><span>Cho phép đọc thư mục</span></button>
+    <button class="chip warn hidden" id="reloginBtn" title="Phiên đăng nhập đã hết hạn"><svg class="i xs"><use href="#i-lock"/></svg><span>Đăng nhập lại</span></button>
+    <label class="chip hidden" id="cloudUpBtn" title="Tải nhạc lên thư viện chung cho cả nhóm"><svg class="i xs"><use href="#i-cloud-up"/></svg><span>Tải lên chung</span>
+      <input id="cloudIn" type="file" accept="audio/*,.flac,.m4a,.opus" multiple hidden></label>
     <button class="chip hidden" id="installBtn" title="Cài app"><svg class="i xs"><use href="#i-download"/></svg><span>Cài app</span></button>
     <button class="chip" id="linkBtn" title="Liên kết thư mục nhạc trên máy, tự đồng bộ"><svg class="i xs"><use href="#i-link"/></svg><span>Liên kết thư mục</span></button>
     <label class="chip" title="Thêm file nhạc"><svg class="i xs"><use href="#i-plus"/></svg><span>Thêm bài</span>
@@ -504,6 +507,9 @@
   <symbol id="i-max" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
   <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
   <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H7a5 5 0 1 1 1.1-9.9A6 6 0 0 1 19.6 11 4 4 0 0 1 17.5 19z"/></symbol>
+  <symbol id="i-cloud-up" viewBox="0 0 24 24"><path d="M7 18a5 5 0 1 1 1.1-9.9A6 6 0 0 1 19.6 10 4 4 0 0 1 18 18"/><path d="M12 21v-8m-3 3 3-3 3 3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
   <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2.5h7.5A2.5 2.5 0 0 1 21 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></symbol>
 </svg>
 
@@ -511,14 +517,15 @@
 // =====================================================================
 //  LƯU TRỮ (IndexedDB) — nhạc & cài đặt được giữ lại giữa các lần mở
 // =====================================================================
-const DB_NAME = 'my-music', STORE = 'tracks', META = 'meta';
+const DB_NAME = 'my-music', STORE = 'tracks', META = 'meta', CACHE = 'cache';
 let db;
 function openDB() {
   return new Promise((res, rej) => {
-    const r = indexedDB.open(DB_NAME, 2);
+    const r = indexedDB.open(DB_NAME, 3);
     r.onupgradeneeded = () => {
       if (!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE, { keyPath: 'id' });
       if (!r.result.objectStoreNames.contains(META)) r.result.createObjectStore(META);
+      if (!r.result.objectStoreNames.contains(CACHE)) r.result.createObjectStore(CACHE);   // bài của thư viện chung đã lưu vào máy
     };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
@@ -531,6 +538,10 @@ const dbPut = v => req(tx('readwrite').put(v));
 const dbDel = id => req(tx('readwrite').delete(id));
 const metaGet = k => req(tx('readonly', META).get(k));
 const metaSet = (k, v) => req(tx('readwrite', META).put(v, k));
+const cacheGet = k => req(tx('readonly', CACHE).get(k));
+const cachePut = (k, v) => req(tx('readwrite', CACHE).put(v, k));
+const cacheDel = k => req(tx('readwrite', CACHE).delete(k));
+const cacheKeys = () => req(tx('readonly', CACHE).getAllKeys());
 
 // =====================================================================
 //  ĐỌC THÔNG TIN BÀI HÁT: ID3 (MP3) và Vorbis comment (FLAC)
@@ -638,7 +649,16 @@ const settings = Object.assign({ shuffle: false, repeat: 'off', volume: 0.8, mut
                                JSON.parse(localStorage.getItem('mm-settings') || '{}'));
 const saveSettings = () => localStorage.setItem('mm-settings', JSON.stringify(settings));
 const artUrls = new Map();
-const artUrl = t => { if (!t || !t.picture) return null; if (!artUrls.has(t.id)) artUrls.set(t.id, URL.createObjectURL(t.picture)); return artUrls.get(t.id); };
+const artUrl = t => {
+  if (!t) return null;
+  if (t.cloud) return t.cover ? 'api/covers/' + t.sid : null;
+  if (!t.picture) return null;
+  if (!artUrls.has(t.id)) artUrls.set(t.id, URL.createObjectURL(t.picture));
+  return artUrls.get(t.id);
+};
+// Thư viện chung (Cloudflare R2) — chỉ có khi app chạy trên Worker có API
+const cloud = { on: false, email: '', owner: false, items: [], totalBytes: 0, quotaBytes: 10 * 1024 ** 3, likes: {}, cached: new Set() };
+const gb = b => b < 1024 ** 3 ? Math.max(0, Math.round(b / 1024 ** 2)) + ' MB' : (b / 1024 ** 3).toFixed(1) + ' GB';
 const fmt = s => { s = Math.floor(s || 0); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const icon = (name, cls = 'sm') => `<svg class="i ${cls}"><use href="#i-${name}"/></svg>`;
@@ -814,6 +834,94 @@ async function getBlob(t) {
 }
 
 // =====================================================================
+//  THƯ VIỆN CHUNG (Cloudflare R2 qua Worker)
+// =====================================================================
+function cloudToTracks() {
+  const mine = cloud.items.map(it => ({
+    id: 'c:' + it.id, sid: it.id, cloud: true, size: it.size, title: it.title, artist: it.artist, album: it.album,
+    albumArtist: it.albumArtist, track: it.track, duration: it.duration, cover: it.cover, by: it.by, added: it.at,
+    liked: !!cloud.likes[it.id], cached: cloud.cached.has(it.id)
+  }));
+  tracks = tracks.filter(t => !t.cloud).concat(mine);
+  sortTracks();
+}
+function sessionExpired() { $('reloginBtn').classList.remove('hidden'); }
+async function apiFetch(path, opts = {}) {
+  let r;
+  try { r = await fetch('api/' + path, { credentials: 'same-origin', cache: 'no-store', ...opts }); }
+  catch (e) { if (navigator.onLine && cloud.on) sessionExpired(); throw new Error(navigator.onLine ? 'phiên đăng nhập hết hạn hoặc mất kết nối' : 'không có mạng'); }
+  if (r.status === 401) { sessionExpired(); throw new Error('chưa đăng nhập'); }
+  if (!(r.headers.get('content-type') || '').includes('json')) throw new Error('máy chủ trả lời lạ (' + r.status + ')');
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'lỗi ' + r.status);
+  return data;
+}
+async function loadCloud(initial) {
+  // Dùng danh sách đã lưu để mở ngay (kể cả khi offline), rồi cập nhật từ máy chủ
+  if (initial) {
+    const saved = await metaGet('cloudLib');
+    cloud.likes = (await metaGet('cloudLikes')) || {};
+    cloud.cached = new Set(await cacheKeys());
+    if (saved) { Object.assign(cloud, saved, { on: true }); cloudToTracks(); }
+  }
+  try {
+    const me = await apiFetch('me');
+    const lib = await apiFetch('library');
+    Object.assign(cloud, { on: true, email: me.email, owner: me.owner, items: lib.items, totalBytes: lib.totalBytes, quotaBytes: lib.quotaBytes });
+    await metaSet('cloudLib', { email: cloud.email, owner: cloud.owner, items: cloud.items, totalBytes: cloud.totalBytes, quotaBytes: cloud.quotaBytes });
+    $('reloginBtn').classList.add('hidden');
+    // Bài đã bị xóa khỏi thư viện chung thì xóa luôn bản lưu trong máy
+    const ids = new Set(cloud.items.map(i => i.id));
+    for (const k of cloud.cached) if (!ids.has(k)) { await cacheDel(k); cloud.cached.delete(k); }
+  } catch (e) {
+    if (!cloud.on) return;            // không có API (vd. bản trên GitHub Pages) → ẩn hẳn thư viện chung
+  }
+  $('cloudUpBtn').classList.toggle('hidden', !cloud.on);
+  cloudToTracks(); renderAll();
+}
+// Lưu cả bài vào máy ở chế độ nền, để lần sau nghe offline và không tải lại
+const caching = new Set();
+async function cacheSong(t) {
+  if (cloud.cached.has(t.sid) || caching.has(t.sid)) return;
+  caching.add(t.sid);
+  try {
+    const r = await fetch('api/songs/' + t.sid, { credentials: 'same-origin' });
+    if (!r.ok) return;
+    await cachePut(t.sid, await r.blob());
+    cloud.cached.add(t.sid); t.cached = true;
+  } catch { /* lần sau thử lại */ } finally { caching.delete(t.sid); }
+}
+async function uploadCloud(files) {
+  files = [...files].filter(f => f.type.startsWith('audio/') || AUDIO_RE.test(f.name));
+  if (!files.length || !cloud.on) return;
+  let ok = 0, skip = 0, fail = 0;
+  for (const [i, f] of files.entries()) {
+    const label = `Tải lên ${i + 1}/${files.length}: ${f.name}`;
+    setStatus(label, true);
+    try {
+      const t = await makeTrack(f);
+      if (cloud.items.some(it => it.size === f.size && it.title === t.title && it.artist === t.artist)) { skip++; continue; }
+      if (cloud.totalBytes + f.size > cloud.quotaBytes) { toast('Thư viện chung đã gần đầy 10 GB miễn phí.'); fail += files.length - i; break; }
+      const id = crypto.randomUUID();
+      let cover = false;
+      if (t.picture && t.picture.size < 3 * 1024 * 1024) {
+        try { await apiFetch('covers/' + id, { method: 'PUT', body: t.picture, headers: { 'content-type': t.picture.type || 'image/jpeg' } }); cover = true; } catch { }
+      }
+      const meta = { title: t.title, artist: t.artist, album: t.album, albumArtist: t.albumArtist, track: t.track, duration: t.duration, cover };
+      const type = f.type && f.type.startsWith('audio/') ? f.type : 'audio/' + (f.name.split('.').pop().toLowerCase().replace('m4a', 'mp4') || 'mpeg');
+      await apiFetch('songs/' + id, { method: 'PUT', body: f, headers: { 'content-type': type, 'x-meta': encodeURIComponent(JSON.stringify(meta)) } });
+      await cachePut(id, f); cloud.cached.add(id);       // người tải lên đã có sẵn bài trong máy
+      cloud.items.push({ id, size: f.size, ...meta, by: cloud.email, at: Date.now() });
+      cloud.totalBytes += f.size;
+      ok++;
+    } catch (e) { fail++; toast(`Không tải lên được "${f.name}": ${e.message}`); }
+  }
+  setStatus('');
+  toast([ok && `Đã tải lên ${ok} bài`, skip && `${skip} bài đã có sẵn`, fail && `${fail} bài lỗi`].filter(Boolean).join(' • ') || 'Không có bài nào được tải lên');
+  await loadCloud();
+}
+
+// =====================================================================
 //  GIAO DIỆN: CỘT GIỮA
 // =====================================================================
 const PILLS = [['home', 'Tất cả'], ['songs', 'Bài hát'], ['albums', 'Album'], ['artists', 'Ca sĩ'], ['liked', 'Đã thích']];
@@ -823,15 +931,17 @@ function renderMain() {
   const main = $('main');
   const q = $('search').value.trim().toLowerCase();
   const active = q ? '' : ['album', 'artist'].includes(view.type) ? '' : view.type;
-  let html = `<div class="pills"><div>${PILLS.map(([k, l]) => `<button class="pill ${active === k ? 'on' : ''}" data-view="${k}">${l}</button>`).join('')}</div>
+  const pills = cloud.on ? [PILLS[0], ['cloud', 'Thư viện chung'], ...PILLS.slice(1)] : PILLS;
+  let html = `<div class="pills"><div>${pills.map(([k, l]) => `<button class="pill ${active === k ? 'on' : ''}" data-view="${k}">${l}</button>`).join('')}</div>
     <button class="pill np-toggle" data-np>${icon('panel', 'xs')}&nbsp;Đang phát</button></div>`;
 
   if (!live().length) {
     html += `<div class="empty"><h2>Thư viện đang trống</h2>
       ${window.showDirectoryPicker ? 'Liên kết thư mục nhạc trên máy để app tự lấy nhạc và tự cập nhật,<br>hoặc thêm file / kéo thả nhạc vào cửa sổ này.'
                                    : 'Bấm “Thêm bài”, mở thư mục nhạc trong máy,<br>giữ ngón tay lên một bài rồi chọn tất cả.'}
-      <div class="acts">${window.showDirectoryPicker ? `<button class="soft-btn solid primary" data-act="link">${icon('link')}Liên kết thư mục</button>` : ''}
-      <button class="soft-btn solid" data-act="add">${icon('plus')}Thêm bài</button></div></div>`;
+      <div class="acts">${cloud.on ? `<button class="soft-btn solid primary" data-act="cloudup">${icon('cloud-up')}Tải lên thư viện chung</button>` : ''}
+      ${window.showDirectoryPicker ? `<button class="soft-btn solid ${cloud.on ? '' : 'primary'}" data-act="link">${icon('link')}Liên kết thư mục</button>` : ''}
+      <button class="soft-btn solid" data-act="add">${icon('plus')}Thêm bài vào máy này</button></div></div>`;
     main.innerHTML = html; return;
   }
 
@@ -865,6 +975,13 @@ function renderMain() {
     html += `<section><div class="sec-head"><h2 class="sec">Album</h2></div>${albums().length ? `<div class="mixes">${albums().sort((a, b) => a.name.localeCompare(b.name, 'vi')).map(albumCard).join('')}</div>` : '<p class="t2">Chưa có bài nào mang tên album trong thẻ thông tin.</p>'}</section>`;
   } else if (view.type === 'artists') {
     html += `<section><div class="sec-head"><h2 class="sec">Ca sĩ</h2></div><div class="mixes">${artists().map(artistCard).join('')}</div></section>`;
+  } else if (view.type === 'cloud') {
+    list = live().filter(t => t.cloud).sort((a, b) => (b.added || 0) - (a.added || 0)); ctx = 'Thư viện chung';
+    const pct = Math.min(100, cloud.totalBytes / cloud.quotaBytes * 100);
+    html += heroHTML({ kind: 'Thư viện chung', name: 'Nhạc của cả nhóm',
+      sub: `${list.length} bài • đã dùng ${gb(cloud.totalBytes)} / ${gb(cloud.quotaBytes)} miễn phí${cloud.email ? ' • bạn: ' + cloud.email : ''}`, art: null, seed: 'cloud', ic: 'cloud' });
+    html += `<div style="height:6px;border-radius:9px;background:rgba(233,213,255,.15);margin:-6px 0 18px;overflow:hidden"><i style="display:block;height:100%;width:${pct}%;background:${pct > 90 ? '#fb7185' : '#e879f9'}"></i></div>`;
+    html += list.length ? rowsHTML(list) : `<div class="empty" style="padding:6vh 20px">Chưa có bài nào trong thư viện chung.<div class="acts"><button class="soft-btn solid primary" data-act="cloudup">${icon('cloud-up')}Tải nhạc lên</button></div></div>`;
   } else if (view.type === 'liked') {
     list = liked(); ctx = 'Bài hát đã thích';
     html += heroHTML({ kind: 'Danh sách', name: 'Bài hát đã thích', sub: `${list.length} bài`, likedArt: true });
@@ -921,11 +1038,13 @@ function rowsHTML(list) {
     const playing = t.id === curId;
     return `<div class="row ${playing ? 'playing' : ''}" data-id="${t.id}">
       <div class="n">${playing ? '<span class="eq"><b></b><b></b><b></b></span>' : i + 1}</div>
-      <div class="who">${coverHTML(artUrl(t), t.album || t.title)}<div style="min-width:0"><div class="t1">${esc(t.title)}</div><div class="t2">${esc(t.artist)}</div></div></div>
+      <div class="who">${coverHTML(artUrl(t), t.album || t.title)}<div style="min-width:0"><div class="t1">${esc(t.title)}</div>
+        <div class="t2">${t.cloud ? `<span title="${t.cached ? 'Thư viện chung • đã lưu vào máy, nghe được offline' : 'Thư viện chung'}" style="color:${t.cached ? '#f0abfc' : 'inherit'}">${icon(t.cached ? 'check' : 'cloud', 'xs')}</span> ` : ''}${esc(t.artist)}${t.cloud && t.by ? ' • ' + esc(t.by.split('@')[0]) : ''}</div></div></div>
       <div class="alb">${esc(t.album)}</div>
       <button class="like ${t.liked ? 'on' : ''}" data-like="${t.id}" title="${t.liked ? 'Bỏ thích' : 'Thích'}">${icon('heart')}</button>
       <div class="dur">${fmt(t.duration)}</div>
-      <button class="del" data-del="${t.id}" title="${t.folderId ? 'Ẩn khỏi app' : 'Xóa khỏi thư viện'}">${icon('x')}</button></div>`;
+      ${t.cloud && !(cloud.owner || t.by === cloud.email) ? '<span></span>'
+        : `<button class="del" data-del="${t.id}" title="${t.cloud ? 'Xóa khỏi thư viện chung' : t.folderId ? 'Ẩn khỏi app' : 'Xóa khỏi thư viện'}">${icon('x')}</button>`}</div>`;
   }).join('')}</div>`;
 }
 function bindRows(root, list, ctx) {
@@ -981,7 +1100,7 @@ function renderNow() {
   document.title = t ? `${t.title} • ${t.artist}` : 'Nhạc của tôi';
   if ('mediaSession' in navigator && t) {
     navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist, album: t.album,
-      artwork: art ? [{ src: art, sizes: '512x512', type: t.picture.type }] : [] });
+      artwork: art ? [{ src: new URL(art, location.href).href, sizes: '512x512', type: t.picture?.type || 'image/jpeg' }] : [] });
   }
   if (settings.bgFromCover) applyBg();
 }
@@ -1025,11 +1144,21 @@ function playList(list, startId, ctx, forceShuffle) {
 }
 async function play(id) {
   const t = tracks.find(x => x.id === id); if (!t) return;
-  let blob;
-  try { blob = await getBlob(t); }
-  catch (e) { toast(`Không mở được "${t.title}": ${e.message}`); if (folders.length) $('permBtn').classList.remove('hidden'); return; }
-  if (curUrl) URL.revokeObjectURL(curUrl);
-  curUrl = URL.createObjectURL(blob);
+  let src;
+  if (t.cloud) {
+    // Đã lưu trong máy → phát ngay từ máy; chưa có → phát trực tuyến và lưu vào máy ở chế độ nền
+    const blob = cloud.cached.has(t.sid) ? await cacheGet(t.sid) : null;
+    if (blob) src = URL.createObjectURL(blob);
+    else if (!navigator.onLine) { toast(`"${t.title}" chưa được lưu vào máy, cần có mạng để nghe.`); return; }
+    else { src = 'api/songs/' + t.sid; cacheSong(t); }
+  } else {
+    let blob;
+    try { blob = await getBlob(t); }
+    catch (e) { toast(`Không mở được "${t.title}": ${e.message}`); if (folders.length) $('permBtn').classList.remove('hidden'); return; }
+    src = URL.createObjectURL(blob);
+  }
+  if (curUrl && curUrl.startsWith('blob:')) URL.revokeObjectURL(curUrl);
+  curUrl = src;
   curId = id; audio.src = curUrl;
   audio.play().catch(() => {});
   renderNow(); markPlayingRows();
@@ -1055,7 +1184,9 @@ function cycleRepeat() {
 }
 async function toggleLike(id) {
   const t = tracks.find(x => x.id === id); if (!t) return;
-  t.liked = !t.liked; await dbPut(t);
+  t.liked = !t.liked;
+  if (t.cloud) { if (t.liked) cloud.likes[t.sid] = true; else delete cloud.likes[t.sid]; await metaSet('cloudLikes', cloud.likes); }
+  else await dbPut(t);
   toast(t.liked ? 'Đã thêm vào Bài hát đã thích' : 'Đã bỏ khỏi Bài hát đã thích');
   $$(`[data-like="${id}"]`).forEach(b => b.classList.toggle('on', t.liked));
   renderLib(); renderNow();
@@ -1063,7 +1194,16 @@ async function toggleLike(id) {
 }
 async function removeTrack(id) {
   const t = tracks.find(x => x.id === id); if (!t) return;
-  if (t.folderId) { if (!confirm(`Ẩn "${t.title}" khỏi app? (File trên máy không bị xóa.)`)) return; t.hidden = true; await dbPut(t); }
+  if (t.cloud) {
+    if (!confirm(`Xóa "${t.title}" khỏi THƯ VIỆN CHUNG? Mọi người trong nhóm sẽ không nghe được bài này nữa.`)) return;
+    try { await apiFetch('songs/' + t.sid, { method: 'DELETE' }); }
+    catch (e) { toast('Không xóa được: ' + e.message); return; }
+    cloud.items = cloud.items.filter(i => i.id !== t.sid); cloud.totalBytes -= t.size || 0;
+    await cacheDel(t.sid); cloud.cached.delete(t.sid);
+    tracks = tracks.filter(x => x.id !== id);
+    await metaSet('cloudLib', { email: cloud.email, owner: cloud.owner, items: cloud.items, totalBytes: cloud.totalBytes, quotaBytes: cloud.quotaBytes });
+  }
+  else if (t.folderId) { if (!confirm(`Ẩn "${t.title}" khỏi app? (File trên máy không bị xóa.)`)) return; t.hidden = true; await dbPut(t); }
   else { if (!confirm(`Xóa "${t.title}" khỏi thư viện?`)) return; await dbDel(t.id); tracks = tracks.filter(x => x.id !== id); }
   if (curId === id) { audio.pause(); curId = null; }
   queue = queue.filter(x => x !== id); queueBase = queueBase.filter(x => x !== id);
@@ -1144,6 +1284,7 @@ document.addEventListener('click', async e => {
     case 'shuffleall': { const l = $('main')._list || []; return playList(l, l[Math.floor(Math.random() * l.length)]?.id, $('main')._ctx, true); }
     case 'link': return linkFolder();
     case 'add': return $('fileIn').click();
+    case 'cloudup': return $('cloudIn').click();
   }
 });
 $('homeBtn').onclick = () => go({ type: 'home' });
@@ -1154,6 +1295,9 @@ $('pCover').onclick = $('queueBtn').onclick = () => document.body.classList.togg
 $('npClose').onclick = () => document.body.classList.remove('np-open');
 $('fileIn').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
 $('dirIn').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
+$('cloudIn').onchange = e => { uploadCloud(e.target.files); e.target.value = ''; };
+$('reloginBtn').onclick = () => location.reload();   // Cloudflare Access sẽ hiện trang đăng nhập
+addEventListener('online', () => cloud.on && loadCloud());
 $('linkBtn').onclick = () => { if (!folders.length) linkFolder(); else { renderFolders(); $('folderDlg').showModal(); } };
 $('addFolderBtn').onclick = () => { $('folderDlg').close(); linkFolder(); };
 $('rescanBtn').onclick = () => { $('folderDlg').close(); syncFolders(true); };
@@ -1216,6 +1360,7 @@ if (!window.showDirectoryPicker) $('linkBtn').classList.add('hidden');
     if (navigator.storage?.persist) navigator.storage.persist();
   } catch (e) { toast('Trình duyệt không cho lưu thư viện, nhạc chỉ giữ đến khi đóng trang.'); }
   sortTracks(); applyVolume(); applyBg(); renderAll();
+  if (db && location.protocol.startsWith('http')) await loadCloud(true);
   syncFolders(false);
 })();
 </script>

@@ -1,6 +1,6 @@
 // Service worker: lưu giao diện app để mở được khi không có mạng.
 // Khi sửa app, tăng số phiên bản này để điện thoại tải bản mới.
-const VERSION = 'v4';
+const VERSION = 'v5';
 const SHELL = ['./', './index.html', './manifest.webmanifest',
                './icon-192.png', './icon-512.png', './icon-maskable.png', './apple-touch-icon.png', './favicon.png'];
 
@@ -15,12 +15,14 @@ self.addEventListener('activate', e => {
 });
 
 // Có mạng: lấy bản mới nhất rồi cập nhật bộ nhớ đệm. Mất mạng: dùng bản đã lưu.
+// Không đụng vào /api/ (nhạc phát theo từng đoạn; app tự lưu bài vào máy theo cách riêng).
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.includes('/api/')) return;
   e.respondWith(
     fetch(e.request)
       .then(res => {
-        if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
+        if (res.ok && res.status === 200) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
         return res;
       })
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('./index.html')))

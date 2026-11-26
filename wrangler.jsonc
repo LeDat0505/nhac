@@ -1,0 +1,18 @@
+{
+  // Cấu hình Cloudflare Worker cho app "Nhạc của tôi"
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "nhac",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "preview_urls": false,          // không mở địa chỉ xem trước (tránh lối vào không qua Access)
+  "assets": {
+    "directory": "./docs",          // chỉ đưa lên đúng các file của app
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "r2_buckets": [
+    { "binding": "MUSIC", "bucket_name": "nhac-music" }
+  ],
+  "observability": { "enabled": true }
+}

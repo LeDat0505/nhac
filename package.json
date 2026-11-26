@@ -1,0 +1,12 @@
+{
+  "name": "nhac",
+  "private": true,
+  "description": "App nghe nhạc cá nhân + thư viện chung trên Cloudflare R2",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "logs": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.168.0"
+  }
+}
