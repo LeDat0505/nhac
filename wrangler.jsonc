@@ -13,7 +13,7 @@
     "run_worker_first": ["/api/*"]
   },
   "kv_namespaces": [
-    { "binding": "INDEX", "id": "SE_DIEN_SAU_KHI_TAO_KV" }
+    { "binding": "INDEX", "id": "ba76f08ab9ca4f3c9b76537d0a8020db" }
   ],
   "observability": { "enabled": true }
 }

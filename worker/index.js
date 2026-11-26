@@ -26,7 +26,11 @@ const err = (status, msg) => json({ error: msg }, status);
 // ---------- Lưu trữ file: Backblaze B2 qua S3 API ----------
 export function b2Store(env) {
   const region = (/^s3\.([^.]+)\./.exec(env.B2_ENDPOINT || '') || [])[1] || 'us-east-005';
-  const aws = new AwsClient({ accessKeyId: env.B2_KEY_ID, secretAccessKey: env.B2_APP_KEY, service: 's3', region });
+  // keyID của B2 luôn là chuỗi hex bắt đầu bằng "00"; nếu lỡ nhập đảo hai khóa thì tự đổi lại
+  let keyId = (env.B2_KEY_ID || '').trim(), appKey = (env.B2_APP_KEY || '').trim();
+  const isKeyId = s => /^00[0-9a-f]{20,}$/i.test(s);
+  if (!isKeyId(keyId) && isKeyId(appKey)) [keyId, appKey] = [appKey, keyId];
+  const aws = new AwsClient({ accessKeyId: keyId, secretAccessKey: appKey, service: 's3', region });
   const url = key => `https://${env.B2_ENDPOINT}/${env.B2_BUCKET}/${key}`;
   return {
     // Trả nguyên Response của B2 (hỗ trợ Range / If-None-Match)
@@ -161,6 +165,16 @@ async function api(req, env, url) {
   const method = req.method;
   if (res === 'login' && method === 'POST') return login(req, env);
   if (res === 'logout' && method === 'POST') return json({ ok: true }, 200, { 'set-cookie': cookie('', 0) });
+  if (res === 'health' && method === 'GET') {
+    // Chỉ báo kho lưu trữ có kết nối được không (không lộ dữ liệu). File này không tồn tại → 404 nghĩa là khóa B2 đúng.
+    let storage = 'chưa cấu hình';
+    if (env.TEST_STORE || (env.B2_KEY_ID && env.B2_APP_KEY && env.B2_BUCKET && env.B2_ENDPOINT)) {
+      try { const r = await (env.TEST_STORE || b2Store(env)).get('health/ping'); storage = r.ok || r.status === 404 ? 'ok' : 'lỗi ' + r.status; }
+      catch { storage = 'lỗi kết nối'; }
+    }
+    let keys = 0; try { keys = Object.keys(JSON.parse(env.ACCESS_KEYS || '{}')).length; } catch { }
+    return json({ storage, index: !!env.INDEX, inviteCodes: keys });
+  }
 
   const user = await currentUser(req, env);
   if (!user) return err(401, 'Chưa đăng nhập.');
