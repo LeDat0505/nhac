@@ -149,11 +149,67 @@ async function getFile(req, st, key) {
   return new Response(r.status === 304 ? null : r.body, { status: r.status, headers });
 }
 
+// ---------- Lời bài hát (lưu chung trong KV "lyr:<id>") ----------
+// Định dạng lưu: { lrc: "<chuỗi LRC hoặc lời thường>", synced: bool, src: "file"|"lrclib"|"user", at }
+// hoặc { none: true, at } khi đã tìm mà không có (hết hạn sau 7 ngày để thử lại).
+const LYRICS_MAX = 60 * 1024;
+const LRCLIB = 'https://lrclib.net/api/';
+const LRCLIB_UA = 'nhac-app/1.0 (ung dung nghe nhac ca nhan)';
+
+async function lookupLrclib(m) {
+  const q = p => fetch(LRCLIB + p, { headers: { 'user-agent': LRCLIB_UA } });
+  const pick = r => r && !r.instrumental && (r.syncedLyrics || r.plainLyrics)
+    ? { lrc: r.syncedLyrics || r.plainLyrics, synced: !!r.syncedLyrics, src: 'lrclib' } : null;
+  const base = new URLSearchParams({ track_name: m.t || '', artist_name: m.a || '' });
+  if (m.d) {
+    const exact = new URLSearchParams(base); exact.set('duration', String(Math.round(m.d)));
+    if (m.al) exact.set('album_name', m.al);
+    const r = await q('get?' + exact);
+    if (r.ok) { const hit = pick(await r.json()); if (hit) return hit; }
+  }
+  const r = await q('search?' + base);
+  if (!r.ok) return null;
+  const list = (await r.json()).filter(x => !x.instrumental && (x.syncedLyrics || x.plainLyrics));
+  // ưu tiên bài có thời lượng gần nhất (lệch ≤ 5 giây), có lời chạy theo nhạc
+  list.sort((x, y) => (Math.abs((x.duration || 0) - (m.d || 0)) - Math.abs((y.duration || 0) - (m.d || 0))) || (!!y.syncedLyrics - !!x.syncedLyrics));
+  const best = list[0];
+  if (!best || (m.d && Math.abs((best.duration || 0) - m.d) > 5)) return null;
+  return pick(best);
+}
+
+async function getLyrics(env, id, cachedOnly) {
+  const saved = await env.INDEX.get('lyr:' + id, 'json');
+  if (saved) return json(saved);
+  if (cachedOnly) return json({ none: true, notFetched: true });   // người dùng tắt "tự tìm lời"
+  const meta = (await env.INDEX.getWithMetadata('song:' + id)).metadata;
+  if (!meta) return err(404, 'Không tìm thấy.');
+  let found = null;
+  try { found = await lookupLrclib(meta); } catch { return err(502, 'Không kết nối được kho lời bài hát.'); }
+  const data = found ? { ...found, at: Date.now() } : { none: true, at: Date.now() };
+  await env.INDEX.put('lyr:' + id, JSON.stringify(data), found ? {} : { expirationTtl: 7 * 86400 });
+  return json(data);
+}
+
+async function putLyrics(req, env, id, user) {
+  const meta = (await env.INDEX.getWithMetadata('song:' + id)).metadata;
+  if (!meta) return err(404, 'Không tìm thấy.');
+  if (meta.by !== user.name && !user.owner) return err(403, 'Chỉ người tải lên hoặc chủ thư viện mới sửa được lời.');
+  let body = {};
+  try { body = await req.json(); } catch { return err(400, 'Dữ liệu không hợp lệ.'); }
+  const lrc = String(body.lrc || '').replace(/\r\n?/g, '\n').trim();
+  if (!lrc) { await env.INDEX.delete('lyr:' + id); return json({ ok: true, deleted: true }); }
+  if (new TextEncoder().encode(lrc).length > LYRICS_MAX) return err(413, 'Lời bài hát quá dài.');
+  const data = { lrc, synced: /\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]/.test(lrc), src: body.src === 'file' ? 'file' : 'user', at: Date.now() };
+  await env.INDEX.put('lyr:' + id, JSON.stringify(data));
+  return json(data);
+}
+
 async function deleteSong(env, st, id, user) {
   const meta = (await env.INDEX.getWithMetadata('song:' + id)).metadata;
   if (!meta) return err(404, 'Không tìm thấy.');
   if (meta.by !== user.name && !user.owner) return err(403, 'Chỉ người tải lên hoặc chủ thư viện mới xóa được.');
   await env.INDEX.delete('song:' + id);
+  await env.INDEX.delete('lyr:' + id);
   await st.del('songs/' + id);
   if (meta.cs) await st.del('covers/' + id);
   return json({ ok: true });
@@ -181,6 +237,11 @@ async function api(req, env, url) {
   const st = env.TEST_STORE || b2Store(env);
   if (res === 'me' && method === 'GET') return json(user);
   if (res === 'library' && method === 'GET') return json(await listLibrary(env));
+  if (res === 'lyrics' && id && ID_RE.test(id) && parts.length === 2) {
+    if (method === 'GET') return getLyrics(env, id, url.searchParams.get('cached') === '1');
+    if (method === 'PUT') return putLyrics(req, env, id, user);
+    return err(405, 'Không hỗ trợ.');
+  }
   if ((res === 'songs' || res === 'covers') && id && ID_RE.test(id) && parts.length === 2) {
     const key = res + '/' + id;
     if (method === 'GET' || method === 'HEAD') return getFile(req, st, key);
