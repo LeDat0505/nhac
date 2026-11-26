@@ -354,7 +354,7 @@
   <div class="hdr-right">
     <span id="status" class="t2"></span>
     <button class="chip warn hidden" id="permBtn" title="Cho phép đọc thư mục nhạc"><svg class="i xs"><use href="#i-lock"/></svg><span>Cho phép đọc thư mục</span></button>
-    <button class="chip warn hidden" id="reloginBtn" title="Phiên đăng nhập đã hết hạn"><svg class="i xs"><use href="#i-lock"/></svg><span>Đăng nhập lại</span></button>
+    <button class="chip warn hidden" id="reloginBtn" title="Đăng nhập thư viện chung bằng mã mời"><svg class="i xs"><use href="#i-cloud"/></svg><span>Đăng nhập thư viện chung</span></button>
     <label class="chip hidden" id="cloudUpBtn" title="Tải nhạc lên thư viện chung cho cả nhóm"><svg class="i xs"><use href="#i-cloud-up"/></svg><span>Tải lên chung</span>
       <input id="cloudIn" type="file" accept="audio/*,.flac,.m4a,.opus" multiple hidden></label>
     <button class="chip hidden" id="installBtn" title="Cài app"><svg class="i xs"><use href="#i-download"/></svg><span>Cài app</span></button>
@@ -474,6 +474,22 @@
     <button class="soft-btn solid primary" id="addFolderBtn"><svg class="i sm"><use href="#i-plus"/></svg>Liên kết thư mục mới</button>
     <button class="soft-btn solid" id="rescanBtn">Quét lại ngay</button>
   </div>
+</dialog>
+
+<!-- 6. ĐĂNG NHẬP THƯ VIỆN CHUNG -->
+<dialog id="loginDlg">
+  <div class="dlg-head">
+    <div><div class="dlg-icon"><svg class="i"><use href="#i-cloud"/></svg></div>
+      <div><h3>Thư viện chung</h3><p>Nghe và tải nhạc lên cùng nhóm</p></div></div>
+    <button class="icon-btn" data-close><svg class="i"><use href="#i-x"/></svg></button>
+  </div>
+  <p class="hint">Nhập mã mời mà chủ thư viện gửi cho bạn. Chỉ cần nhập một lần trên mỗi máy.</p>
+  <form method="dialog" id="loginForm" style="display:grid;gap:10px">
+    <input id="loginKey" type="password" autocomplete="current-password" placeholder="Mã mời"
+           style="height:44px;padding:0 14px;border-radius:12px;background:rgba(46,16,101,.6);border:1px solid rgba(192,132,252,.3);outline:none">
+    <div id="loginErr" style="color:#fda4af;font-size:13px;min-height:18px"></div>
+    <button class="soft-btn solid primary" id="loginGo" type="submit">Vào thư viện chung</button>
+  </form>
 </dialog>
 
 <div class="drop" id="drop">Thả nhạc vào đây</div>
@@ -834,8 +850,17 @@ async function getBlob(t) {
 }
 
 // =====================================================================
-//  THƯ VIỆN CHUNG (Cloudflare R2 qua Worker)
+//  THƯ VIỆN CHUNG (Cloudflare Worker + Backblaze B2, đăng nhập bằng mã mời)
 // =====================================================================
+// Mục lục trên Cloudflare KV cập nhật chậm tới ~1 phút → nhớ tạm bài vừa thêm/xóa trong 5 phút
+const pending = { add: new Map(), del: new Map() };
+const FRESH = 5 * 60e3;
+function mergePending(items) {
+  const now = Date.now();
+  for (const [k, ts] of pending.del) if (now - ts > FRESH) pending.del.delete(k);
+  for (const [k, v] of pending.add) if (now - v.ts > FRESH || items.some(i => i.id === k)) pending.add.delete(k);
+  return items.filter(i => !pending.del.has(i.id)).concat([...pending.add.values()].map(v => v.item));
+}
 function cloudToTracks() {
   const mine = cloud.items.map(it => ({
     id: 'c:' + it.id, sid: it.id, cloud: true, size: it.size, title: it.title, artist: it.artist, album: it.album,
@@ -845,17 +870,20 @@ function cloudToTracks() {
   tracks = tracks.filter(t => !t.cloud).concat(mine);
   sortTracks();
 }
-function sessionExpired() { $('reloginBtn').classList.remove('hidden'); }
+// Cần đăng nhập: hiện nút "Đăng nhập" (máy chủ có thư viện chung nhưng chưa có/đã hết mã mời)
+function needLogin() { cloud.available = true; $('reloginBtn').classList.remove('hidden'); }
 async function apiFetch(path, opts = {}) {
   let r;
   try { r = await fetch('api/' + path, { credentials: 'same-origin', cache: 'no-store', ...opts }); }
-  catch (e) { if (navigator.onLine && cloud.on) sessionExpired(); throw new Error(navigator.onLine ? 'phiên đăng nhập hết hạn hoặc mất kết nối' : 'không có mạng'); }
-  if (r.status === 401) { sessionExpired(); throw new Error('chưa đăng nhập'); }
-  if (!(r.headers.get('content-type') || '').includes('json')) throw new Error('máy chủ trả lời lạ (' + r.status + ')');
+  catch (e) { throw new Error(navigator.onLine ? 'mất kết nối tới máy chủ' : 'không có mạng'); }
+  const isJson = (r.headers.get('content-type') || '').includes('json');
+  if (r.status === 401 && isJson) { needLogin(); throw new Error('chưa đăng nhập'); }
+  if (!isJson) throw new Error('máy chủ trả lời lạ (' + r.status + ')');
   const data = await r.json();
   if (!r.ok) throw new Error(data.error || 'lỗi ' + r.status);
   return data;
 }
+const saveCloudLib = () => metaSet('cloudLib', { user: cloud.user, owner: cloud.owner, items: cloud.items, totalBytes: cloud.totalBytes, quotaBytes: cloud.quotaBytes });
 async function loadCloud(initial) {
   // Dùng danh sách đã lưu để mở ngay (kể cả khi offline), rồi cập nhật từ máy chủ
   if (initial) {
@@ -867,17 +895,42 @@ async function loadCloud(initial) {
   try {
     const me = await apiFetch('me');
     const lib = await apiFetch('library');
-    Object.assign(cloud, { on: true, email: me.email, owner: me.owner, items: lib.items, totalBytes: lib.totalBytes, quotaBytes: lib.quotaBytes });
-    await metaSet('cloudLib', { email: cloud.email, owner: cloud.owner, items: cloud.items, totalBytes: cloud.totalBytes, quotaBytes: cloud.quotaBytes });
+    const items = mergePending(lib.items);
+    const extra = [...pending.add.values()].reduce((s, v) => s + (lib.items.some(i => i.id === v.item.id) ? 0 : v.item.size), 0);
+    Object.assign(cloud, { on: true, available: true, user: me.name, owner: me.owner, items, totalBytes: lib.totalBytes + extra, quotaBytes: lib.quotaBytes });
+    await saveCloudLib();
     $('reloginBtn').classList.add('hidden');
     // Bài đã bị xóa khỏi thư viện chung thì xóa luôn bản lưu trong máy
     const ids = new Set(cloud.items.map(i => i.id));
     for (const k of cloud.cached) if (!ids.has(k)) { await cacheDel(k); cloud.cached.delete(k); }
   } catch (e) {
-    if (!cloud.on) return;            // không có API (vd. bản trên GitHub Pages) → ẩn hẳn thư viện chung
+    if (!cloud.on && !cloud.available) return;   // không có API (vd. bản trên GitHub Pages) → ẩn hẳn thư viện chung
   }
   $('cloudUpBtn').classList.toggle('hidden', !cloud.on);
   cloudToTracks(); renderAll();
+}
+async function cloudLogin() {
+  const key = $('loginKey').value.trim();
+  if (!key) { $('loginErr').textContent = 'Nhập mã mời trước đã.'; return; }
+  $('loginErr').textContent = ''; $('loginGo').disabled = true;
+  try {
+    await apiFetch('login', { method: 'POST', body: JSON.stringify({ key }), headers: { 'content-type': 'application/json' } });
+    $('loginDlg').close(); $('loginKey').value = '';
+    await loadCloud();
+    toast(`Chào ${cloud.user}! Đã vào thư viện chung.`);
+    go({ type: 'cloud' });
+  } catch (e) { $('loginErr').textContent = e.message === 'chưa đăng nhập' ? 'Mã mời không đúng.' : 'Không đăng nhập được: ' + e.message; }
+  finally { $('loginGo').disabled = false; }
+}
+async function cloudLogout() {
+  if (!confirm('Đăng xuất khỏi thư viện chung trên máy này? Các bài đã lưu vào máy sẽ bị xóa khỏi máy.')) return;
+  try { await apiFetch('logout', { method: 'POST' }); } catch { }
+  for (const k of cloud.cached) await cacheDel(k);
+  await metaSet('cloudLib', null);
+  Object.assign(cloud, { on: false, user: '', owner: false, items: [], totalBytes: 0, cached: new Set() });
+  tracks = tracks.filter(t => !t.cloud);
+  $('cloudUpBtn').classList.add('hidden'); needLogin();
+  go({ type: 'home' });
 }
 // Lưu cả bài vào máy ở chế độ nền, để lần sau nghe offline và không tải lại
 const caching = new Set();
@@ -903,16 +956,18 @@ async function uploadCloud(files) {
       if (cloud.items.some(it => it.size === f.size && it.title === t.title && it.artist === t.artist)) { skip++; continue; }
       if (cloud.totalBytes + f.size > cloud.quotaBytes) { toast('Thư viện chung đã gần đầy 10 GB miễn phí.'); fail += files.length - i; break; }
       const id = crypto.randomUUID();
-      let cover = false;
-      if (t.picture && t.picture.size < 3 * 1024 * 1024) {
-        try { await apiFetch('covers/' + id, { method: 'PUT', body: t.picture, headers: { 'content-type': t.picture.type || 'image/jpeg' } }); cover = true; } catch { }
+      let cover = false, coverSize = 0;
+      if (t.picture && t.picture.size < 3 * 1024 * 1024 && /^image\/(jpeg|png|webp|gif)$/.test(t.picture.type || 'image/jpeg')) {
+        try { await apiFetch('covers/' + id, { method: 'PUT', body: t.picture, headers: { 'content-type': t.picture.type || 'image/jpeg' } }); cover = true; coverSize = t.picture.size; } catch { }
       }
-      const meta = { title: t.title, artist: t.artist, album: t.album, albumArtist: t.albumArtist, track: t.track, duration: t.duration, cover };
-      const type = f.type && f.type.startsWith('audio/') ? f.type : 'audio/' + (f.name.split('.').pop().toLowerCase().replace('m4a', 'mp4') || 'mpeg');
-      await apiFetch('songs/' + id, { method: 'PUT', body: f, headers: { 'content-type': type, 'x-meta': encodeURIComponent(JSON.stringify(meta)) } });
+      const meta = { title: t.title, artist: t.artist, album: t.album, albumArtist: t.albumArtist, track: t.track, duration: t.duration, cover, coverSize };
+      const ext = f.name.split('.').pop().toLowerCase();
+      const type = f.type && f.type.startsWith('audio/') ? f.type : ({ mp3: 'audio/mpeg', m4a: 'audio/mp4', flac: 'audio/flac', ogg: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav' }[ext] || 'audio/mpeg');
+      const res = await apiFetch('songs/' + id, { method: 'PUT', body: f, headers: { 'content-type': type, 'x-meta': encodeURIComponent(JSON.stringify(meta)) } });
       await cachePut(id, f); cloud.cached.add(id);       // người tải lên đã có sẵn bài trong máy
-      cloud.items.push({ id, size: f.size, ...meta, by: cloud.email, at: Date.now() });
-      cloud.totalBytes += f.size;
+      pending.add.set(id, { ts: Date.now(), item: res.item });
+      cloud.items.push(res.item);
+      cloud.totalBytes += f.size + coverSize;
       ok++;
     } catch (e) { fail++; toast(`Không tải lên được "${f.name}": ${e.message}`); }
   }
@@ -939,7 +994,8 @@ function renderMain() {
     html += `<div class="empty"><h2>Thư viện đang trống</h2>
       ${window.showDirectoryPicker ? 'Liên kết thư mục nhạc trên máy để app tự lấy nhạc và tự cập nhật,<br>hoặc thêm file / kéo thả nhạc vào cửa sổ này.'
                                    : 'Bấm “Thêm bài”, mở thư mục nhạc trong máy,<br>giữ ngón tay lên một bài rồi chọn tất cả.'}
-      <div class="acts">${cloud.on ? `<button class="soft-btn solid primary" data-act="cloudup">${icon('cloud-up')}Tải lên thư viện chung</button>` : ''}
+      <div class="acts">${cloud.on ? `<button class="soft-btn solid primary" data-act="cloudup">${icon('cloud-up')}Tải lên thư viện chung</button>`
+                       : cloud.available ? `<button class="soft-btn solid primary" data-act="login">${icon('cloud')}Đăng nhập thư viện chung</button>` : ''}
       ${window.showDirectoryPicker ? `<button class="soft-btn solid ${cloud.on ? '' : 'primary'}" data-act="link">${icon('link')}Liên kết thư mục</button>` : ''}
       <button class="soft-btn solid" data-act="add">${icon('plus')}Thêm bài vào máy này</button></div></div>`;
     main.innerHTML = html; return;
@@ -979,9 +1035,10 @@ function renderMain() {
     list = live().filter(t => t.cloud).sort((a, b) => (b.added || 0) - (a.added || 0)); ctx = 'Thư viện chung';
     const pct = Math.min(100, cloud.totalBytes / cloud.quotaBytes * 100);
     html += heroHTML({ kind: 'Thư viện chung', name: 'Nhạc của cả nhóm',
-      sub: `${list.length} bài • đã dùng ${gb(cloud.totalBytes)} / ${gb(cloud.quotaBytes)} miễn phí${cloud.email ? ' • bạn: ' + cloud.email : ''}`, art: null, seed: 'cloud', ic: 'cloud' });
+      sub: `${list.length} bài • đã dùng ${gb(cloud.totalBytes)} / ${gb(cloud.quotaBytes)} miễn phí${cloud.user ? ' • bạn: ' + cloud.user : ''}`, art: null, seed: 'cloud', ic: 'cloud' });
     html += `<div style="height:6px;border-radius:9px;background:rgba(233,213,255,.15);margin:-6px 0 18px;overflow:hidden"><i style="display:block;height:100%;width:${pct}%;background:${pct > 90 ? '#fb7185' : '#e879f9'}"></i></div>`;
     html += list.length ? rowsHTML(list) : `<div class="empty" style="padding:6vh 20px">Chưa có bài nào trong thư viện chung.<div class="acts"><button class="soft-btn solid primary" data-act="cloudup">${icon('cloud-up')}Tải nhạc lên</button></div></div>`;
+    html += `<p style="margin-top:24px;text-align:center"><button class="link" data-act="logout">Đăng xuất khỏi thư viện chung</button></p>`;
   } else if (view.type === 'liked') {
     list = liked(); ctx = 'Bài hát đã thích';
     html += heroHTML({ kind: 'Danh sách', name: 'Bài hát đã thích', sub: `${list.length} bài`, likedArt: true });
@@ -1039,11 +1096,11 @@ function rowsHTML(list) {
     return `<div class="row ${playing ? 'playing' : ''}" data-id="${t.id}">
       <div class="n">${playing ? '<span class="eq"><b></b><b></b><b></b></span>' : i + 1}</div>
       <div class="who">${coverHTML(artUrl(t), t.album || t.title)}<div style="min-width:0"><div class="t1">${esc(t.title)}</div>
-        <div class="t2">${t.cloud ? `<span title="${t.cached ? 'Thư viện chung • đã lưu vào máy, nghe được offline' : 'Thư viện chung'}" style="color:${t.cached ? '#f0abfc' : 'inherit'}">${icon(t.cached ? 'check' : 'cloud', 'xs')}</span> ` : ''}${esc(t.artist)}${t.cloud && t.by ? ' • ' + esc(t.by.split('@')[0]) : ''}</div></div></div>
+        <div class="t2">${t.cloud ? `<span title="${t.cached ? 'Thư viện chung • đã lưu vào máy, nghe được offline' : 'Thư viện chung'}" style="color:${t.cached ? '#f0abfc' : 'inherit'}">${icon(t.cached ? 'check' : 'cloud', 'xs')}</span> ` : ''}${esc(t.artist)}${t.cloud && t.by ? ' • ' + esc(t.by) : ''}</div></div></div>
       <div class="alb">${esc(t.album)}</div>
       <button class="like ${t.liked ? 'on' : ''}" data-like="${t.id}" title="${t.liked ? 'Bỏ thích' : 'Thích'}">${icon('heart')}</button>
       <div class="dur">${fmt(t.duration)}</div>
-      ${t.cloud && !(cloud.owner || t.by === cloud.email) ? '<span></span>'
+      ${t.cloud && !(cloud.owner || t.by === cloud.user) ? '<span></span>'
         : `<button class="del" data-del="${t.id}" title="${t.cloud ? 'Xóa khỏi thư viện chung' : t.folderId ? 'Ẩn khỏi app' : 'Xóa khỏi thư viện'}">${icon('x')}</button>`}</div>`;
   }).join('')}</div>`;
 }
@@ -1198,10 +1255,12 @@ async function removeTrack(id) {
     if (!confirm(`Xóa "${t.title}" khỏi THƯ VIỆN CHUNG? Mọi người trong nhóm sẽ không nghe được bài này nữa.`)) return;
     try { await apiFetch('songs/' + t.sid, { method: 'DELETE' }); }
     catch (e) { toast('Không xóa được: ' + e.message); return; }
-    cloud.items = cloud.items.filter(i => i.id !== t.sid); cloud.totalBytes -= t.size || 0;
+    const it = cloud.items.find(i => i.id === t.sid);
+    cloud.items = cloud.items.filter(i => i.id !== t.sid); cloud.totalBytes -= (it?.size || 0) + (it?.coverSize || 0);
+    pending.del.set(t.sid, Date.now()); pending.add.delete(t.sid);
     await cacheDel(t.sid); cloud.cached.delete(t.sid);
     tracks = tracks.filter(x => x.id !== id);
-    await metaSet('cloudLib', { email: cloud.email, owner: cloud.owner, items: cloud.items, totalBytes: cloud.totalBytes, quotaBytes: cloud.quotaBytes });
+    await saveCloudLib();
   }
   else if (t.folderId) { if (!confirm(`Ẩn "${t.title}" khỏi app? (File trên máy không bị xóa.)`)) return; t.hidden = true; await dbPut(t); }
   else { if (!confirm(`Xóa "${t.title}" khỏi thư viện?`)) return; await dbDel(t.id); tracks = tracks.filter(x => x.id !== id); }
@@ -1285,6 +1344,8 @@ document.addEventListener('click', async e => {
     case 'link': return linkFolder();
     case 'add': return $('fileIn').click();
     case 'cloudup': return $('cloudIn').click();
+    case 'login': return $('reloginBtn').click();
+    case 'logout': return cloudLogout();
   }
 });
 $('homeBtn').onclick = () => go({ type: 'home' });
@@ -1296,7 +1357,9 @@ $('npClose').onclick = () => document.body.classList.remove('np-open');
 $('fileIn').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
 $('dirIn').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
 $('cloudIn').onchange = e => { uploadCloud(e.target.files); e.target.value = ''; };
-$('reloginBtn').onclick = () => location.reload();   // Cloudflare Access sẽ hiện trang đăng nhập
+$('reloginBtn').onclick = () => { $('loginErr').textContent = ''; $('loginDlg').showModal(); $('loginKey').focus(); };
+$('loginForm').onsubmit = e => { e.preventDefault(); cloudLogin(); };
+$('loginKey').oninput = () => { $('loginErr').textContent = ''; };
 addEventListener('online', () => cloud.on && loadCloud());
 $('linkBtn').onclick = () => { if (!folders.length) linkFolder(); else { renderFolders(); $('folderDlg').showModal(); } };
 $('addFolderBtn').onclick = () => { $('folderDlg').close(); linkFolder(); };

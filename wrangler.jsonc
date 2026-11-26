@@ -1,18 +1,19 @@
 {
   // Cấu hình Cloudflare Worker cho app "Nhạc của tôi"
+  // Khóa Backblaze B2 và mã mời là secret (wrangler secret put ...), không nằm ở đây.
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "nhac",
   "main": "worker/index.js",
   "compatibility_date": "2026-11-01",
   "workers_dev": true,
-  "preview_urls": false,          // không mở địa chỉ xem trước (tránh lối vào không qua Access)
+  "preview_urls": false,
   "assets": {
     "directory": "./docs",          // chỉ đưa lên đúng các file của app
     "binding": "ASSETS",
     "run_worker_first": ["/api/*"]
   },
-  "r2_buckets": [
-    { "binding": "MUSIC", "bucket_name": "nhac-music" }
+  "kv_namespaces": [
+    { "binding": "INDEX", "id": "SE_DIEN_SAU_KHI_TAO_KV" }
   ],
   "observability": { "enabled": true }
 }

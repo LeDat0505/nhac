@@ -1,12 +1,16 @@
 {
   "name": "nhac",
   "private": true,
-  "description": "App nghe nhạc cá nhân + thư viện chung trên Cloudflare R2",
+  "type": "module",
+  "description": "App nghe nhạc cá nhân + thư viện chung (Cloudflare Workers + Backblaze B2)",
   "scripts": {
     "deploy": "wrangler deploy",
     "logs": "wrangler tail"
   },
   "devDependencies": {
     "wrangler": "^4.168.0"
+  },
+  "dependencies": {
+    "aws4fetch": "^1.0.20"
   }
 }
