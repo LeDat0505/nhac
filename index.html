@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nhạc của tôi</title>
+<script>
+  // Mở bằng ".../nhac" (thiếu dấu /) thì chuyển sang ".../nhac/" để các file đi kèm tải đúng chỗ
+  if (!location.pathname.endsWith('/') && !/\.[a-z0-9]+$/i.test(location.pathname))
+    location.replace(location.pathname + '/' + location.search + location.hash);
+</script>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#090412">
+<style>
+  :root {
+    --bg: #07030e; --text: #f3e8ff; --muted: rgba(216, 180, 254, .68); --line: rgba(216, 180, 254, .12);
+    --fuchsia: #d946ef; --purple: #a855f7; --pink: #f472b6; --indigo: #818cf8;
+    --panel-blur: 18px; --tint: .75;
+    --display: "Plus Jakarta Sans", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { height: 100dvh; display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+         font-family: Inter, "Segoe UI", system-ui, sans-serif; font-size: 14px; overflow: hidden;
+         -webkit-font-smoothing: antialiased; user-select: none; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+  input { font: inherit; color: inherit; }
+  svg.i { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2;
+          stroke-linecap: round; stroke-linejoin: round; }
+  svg.i.sm { width: 16px; height: 16px; } svg.i.xs { width: 14px; height: 14px; } svg.i.lg { width: 22px; height: 22px; }
+  svg.i.fill { fill: currentColor; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: rgba(192, 132, 252, .25); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(217, 70, 239, .55); }
+  .hidden { display: none !important; }
+
+  /* ---------- Nền tím tùy chỉnh ---------- */
+  #bg-layer { position: fixed; inset: 0; z-index: 0; background-size: cover; background-position: center; transition: background .5s; }
+  #bg-tint { position: fixed; inset: 0; z-index: 1; pointer-events: none;
+             background: radial-gradient(circle at 20% 20%, rgba(126, 34, 206, calc(var(--tint) * .42)), rgba(9, 4, 18, var(--tint)) 70%); }
+  .bg-obsidian { background: radial-gradient(at 15% 15%, #240b4c 0, transparent 50%), radial-gradient(at 85% 15%, #3b0764 0, transparent 45%),
+                             radial-gradient(at 50% 90%, #1e1b4b 0, transparent 55%), #07030e; }
+  .bg-nebula { background: linear-gradient(-45deg, #16072e, #4c1d95, #701a75, #1e1b4b, #090412); background-size: 300% 300%;
+               animation: aurora 14s ease infinite; }
+  .bg-cyber { background-color: #090314;
+              background-image: linear-gradient(rgba(192, 38, 211, .14) 1px, transparent 1px), linear-gradient(90deg, rgba(168, 85, 247, .14) 1px, transparent 1px),
+                                radial-gradient(circle at 50% 0, rgba(217, 70, 239, .35), transparent 65%);
+              background-size: 36px 36px, 36px 36px, 100% 100%; }
+  .bg-velvet { background: radial-gradient(at 10% 10%, #581c87 0, transparent 55%), radial-gradient(at 90% 80%, #6b21a8 0, transparent 55%), #130726; }
+  @keyframes aurora { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+
+  .panel { background: rgba(20, 10, 38, .68); backdrop-filter: blur(var(--panel-blur)); -webkit-backdrop-filter: blur(var(--panel-blur));
+           border: 1px solid var(--line); border-radius: 16px; }
+
+  /* ---------- Thanh trên cùng ---------- */
+  header { position: relative; z-index: 30; height: 56px; padding: 0 12px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .brand { display: flex; align-items: center; gap: 8px; font-family: var(--display); font-weight: 800; font-size: 15px; min-width: 0; }
+  .brand img { width: 28px; height: 28px; border-radius: 8px; }
+  .hdr-center { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; max-width: 680px; margin: 0 auto; }
+  .round { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
+           background: rgba(59, 7, 100, .7); border: 1px solid rgba(192, 132, 252, .25); transition: background .2s; }
+  .round:hover { background: rgba(107, 33, 168, .8); }
+  .search { position: relative; flex: 1; max-width: 480px; }
+  .search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+  .search input { width: 100%; height: 40px; padding: 0 16px 0 40px; border-radius: 99px; outline: none;
+                  background: rgba(46, 16, 101, .55); border: 1px solid rgba(192, 132, 252, .2); transition: .2s; }
+  .search input::placeholder { color: rgba(216, 180, 254, .55); }
+  .search input:focus { border-color: rgba(232, 121, 249, .6); background: rgba(59, 7, 100, .85); }
+  .grad-btn { height: 40px; padding: 0 14px; border-radius: 99px; display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+              font-size: 12px; font-weight: 700; color: #fff; border: 1px solid rgba(240, 171, 252, .3);
+              background: linear-gradient(90deg, rgba(126, 34, 206, .85), rgba(162, 28, 175, .85)); box-shadow: 0 6px 20px rgba(59, 7, 100, .6); }
+  .grad-btn:hover { background: linear-gradient(90deg, #9333ea, #c026d3); }
+  .hdr-right { display: flex; align-items: center; gap: 6px; }
+  .chip { height: 34px; padding: 0 12px; border-radius: 99px; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+          background: rgba(59, 7, 100, .6); border: 1px solid rgba(192, 132, 252, .2); white-space: nowrap; }
+  .chip:hover { background: rgba(107, 33, 168, .75); }
+  .chip.warn { border-color: #f59e0b; color: #fcd34d; }
+
+  /* ---------- 3 cột ---------- */
+  .workspace { position: relative; z-index: 20; flex: 1; display: flex; gap: 8px; padding: 0 8px 8px; min-height: 0; }
+  /* Cột trái: thư viện */
+  #lib { width: 72px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 10px; transition: width .25s; }
+  #lib.wide { width: 280px; align-items: stretch; padding: 12px 10px; }
+  .lib-top { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  #lib.wide .lib-top { flex-direction: row; justify-content: space-between; padding: 0 4px; }
+  .lib-title { display: none; font-family: var(--display); font-weight: 700; color: var(--muted); align-items: center; gap: 8px; }
+  #lib.wide .lib-title { display: flex; }
+  .icon-btn { padding: 8px; border-radius: 10px; color: rgba(233, 213, 255, .8); display: grid; place-items: center; transition: .2s; }
+  .icon-btn:hover { color: #fff; background: rgba(107, 33, 168, .4); }
+  .icon-btn.on { color: #f0abfc; }
+  .sep { width: 32px; height: 1px; background: var(--line); align-self: center; }
+  #lib.wide .sep { width: 100%; }
+  #libList { flex: 1; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; padding: 0 8px; }
+  #lib.wide #libList { align-items: stretch; padding: 0; gap: 4px; }
+  .lib-item { display: flex; align-items: center; gap: 10px; border-radius: 12px; text-align: left; flex-shrink: 0; }
+  #lib.wide .lib-item { padding: 6px; } #lib.wide .lib-item:hover { background: rgba(107, 33, 168, .35); }
+  .lib-item .cover { width: 48px; height: 48px; border-radius: 10px; transition: transform .2s; }
+  .lib-item:hover .cover { transform: scale(1.05); }
+  .lib-item .meta { display: none; min-width: 0; }
+  #lib.wide .lib-item .meta { display: block; }
+  .lib-item.active .cover { outline: 2px solid var(--fuchsia); outline-offset: 2px; }
+
+  .cover { background: center / cover no-repeat; display: grid; place-items: center; color: rgba(255, 255, 255, .85); flex-shrink: 0; overflow: hidden; }
+  .t1 { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .t2 { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Cột giữa */
+  #main { flex: 1; min-width: 0; overflow-y: auto; padding: 18px 22px 28px; }
+  .pills { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 18px; position: sticky; top: -18px;
+           z-index: 5; padding: 10px 0; margin-top: -10px; }
+  .pills > div { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill { padding: 6px 16px; border-radius: 99px; font-size: 12px; font-weight: 600; background: rgba(59, 7, 100, .6);
+          border: 1px solid rgba(192, 132, 252, .15); transition: .2s; }
+  .pill:hover { background: rgba(107, 33, 168, .7); }
+  .pill.on { background: #fff; color: #1a0d33; font-weight: 800; box-shadow: 0 4px 14px rgba(9, 4, 18, .5); }
+  .np-toggle { display: none; }
+  h2.sec { font-family: var(--display); font-size: 22px; font-weight: 800; margin: 0; letter-spacing: -.01em; }
+  .sec-head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 14px; }
+  .link { font-size: 12px; font-weight: 700; color: var(--muted); } .link:hover { color: #fff; text-decoration: underline; }
+  section { margin-bottom: 30px; }
+
+  .quick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .q-card { display: flex; align-items: center; gap: 12px; height: 56px; border-radius: 8px; overflow: hidden; text-align: left; position: relative;
+            background: rgba(46, 23, 86, .45); border: 1px solid rgba(216, 180, 254, .08); transition: .22s; }
+  .q-card:hover { background: rgba(88, 28, 135, .55); border-color: rgba(217, 70, 239, .35); }
+  .q-card .cover { width: 56px; height: 56px; }
+  .q-card .t1 { font-family: var(--display); font-weight: 700; font-size: 13px; flex: 1; padding-right: 50px; }
+  .play-fab { position: absolute; right: 10px; width: 36px; height: 36px; border-radius: 50%; background: var(--fuchsia); color: #1a0d33;
+              display: grid; place-items: center; box-shadow: 0 6px 18px rgba(217, 70, 239, .5); opacity: 0; transform: translateY(4px); transition: .2s; }
+  .q-card:hover .play-fab, .mix:hover .play-fab { opacity: 1; transform: none; }
+
+  .mixes { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 16px; }
+  .mix { padding: 12px; border-radius: 12px; text-align: left; background: rgba(28, 14, 52, .55); border: 1px solid rgba(192, 132, 252, .1);
+         transition: all .28s cubic-bezier(.22, 1, .36, 1); position: relative; }
+  .mix:hover { background: rgba(59, 24, 108, .65); border-color: rgba(217, 70, 239, .4); transform: translateY(-4px); }
+  .mix .art { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; margin-bottom: 10px; }
+  .mix .art .cover { width: 100%; height: 100%; }
+  .mix .art .shade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(9, 4, 18, .85), transparent 55%); }
+  .mix .art .label { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; align-items: center; gap: 8px;
+                     font-family: var(--display); font-weight: 800; font-size: 15px; }
+  .mix .art .label i { width: 4px; height: 18px; border-radius: 9px; flex-shrink: 0; }
+  .mix .play-fab { bottom: 64px; right: 20px; }
+  .mix .t2 { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.45; }
+  .mix.round-art .art { border-radius: 50%; }
+
+  /* Danh sách bài */
+  .rows { display: flex; flex-direction: column; gap: 4px; }
+  .row { display: grid; grid-template-columns: 34px minmax(0, 1fr) minmax(0, .7fr) 36px 52px 30px; gap: 12px; align-items: center;
+         padding: 6px 10px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; transition: background .15s; }
+  .row:hover { background: rgba(88, 28, 135, .35); }
+  .row.playing { background: rgba(126, 34, 206, .28); border-color: rgba(217, 70, 239, .25); }
+  .row .n { text-align: center; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .row.playing .n, .row.playing .t1 { color: #f0abfc; }
+  .row .who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .row .who .cover { width: 42px; height: 42px; border-radius: 6px; }
+  .row .alb { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .dur { font-size: 12px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .row .like, .row .del { color: var(--muted); display: grid; place-items: center; height: 30px; border-radius: 8px; opacity: 0; transition: .15s; }
+  .row:hover .like, .row:hover .del, .row .like.on { opacity: 1; }
+  .like.on { color: var(--fuchsia) !important; } .like.on svg { fill: currentColor; }
+  .row .like:hover { color: #fff; } .row .del:hover { color: #fb7185; }
+  .eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 15px; }
+  .eq b { width: 3px; border-radius: 9px; background: #e879f9; animation: eq .8s ease-in-out infinite alternate; }
+  .eq b:nth-child(1) { height: 8px; animation-delay: .1s; } .eq b:nth-child(2) { height: 15px; animation-delay: .3s; } .eq b:nth-child(3) { height: 10px; animation-delay: .2s; }
+  .paused .eq b { animation-play-state: paused; }
+  @keyframes eq { from { transform: scaleY(.3); } to { transform: scaleY(1.1); } }
+
+  /* Trang chi tiết album / ca sĩ */
+  .hero { display: flex; align-items: flex-end; gap: 22px; margin-bottom: 22px; }
+  .hero .cover { width: 180px; height: 180px; border-radius: 12px; box-shadow: 0 18px 50px rgba(9, 4, 18, .7); }
+  .hero.artist .cover { border-radius: 50%; }
+  .hero .kind { font-size: 12px; font-weight: 700; color: #f0abfc; text-transform: uppercase; letter-spacing: .08em; }
+  .hero h1 { font-family: var(--display); font-size: clamp(26px, 4vw, 46px); font-weight: 800; margin: 6px 0 8px; line-height: 1.05; word-break: break-word; }
+  .hero-actions { display: flex; gap: 10px; margin-bottom: 16px; }
+  .big-play { width: 52px; height: 52px; border-radius: 50%; background: var(--fuchsia); color: #1a0d33; display: grid; place-items: center;
+              box-shadow: 0 8px 26px rgba(217, 70, 239, .5); transition: transform .15s; }
+  .big-play:hover { transform: scale(1.06); }
+  .ghost-btn { height: 52px; padding: 0 18px; border-radius: 99px; border: 1px solid rgba(216, 180, 254, .3); display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .ghost-btn:hover { background: rgba(107, 33, 168, .4); }
+
+  .empty { text-align: center; padding: 12vh 20px; color: var(--muted); line-height: 1.8; }
+  .empty h2 { font-family: var(--display); color: var(--text); font-size: 24px; margin: 0 0 6px; }
+  .empty .acts { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+
+  /* Cột phải: đang phát */
+  #np { width: 340px; flex-shrink: 0; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+  #np .np-bg { position: absolute; inset: 0; background: center / cover no-repeat; transform: scale(1.05); transition: background-image .6s; }
+  #np .np-bg.none { background: radial-gradient(at 30% 20%, #7e22ce, transparent 60%), radial-gradient(at 80% 70%, #be185d, transparent 55%), #1a0d33; }
+  #np .np-shade { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(9, 4, 18, .7), rgba(9, 4, 18, .2) 35%, #090412 78%); pointer-events: none; }
+  .np-top { position: relative; z-index: 2; padding: 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .np-top span { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 4px #000; }
+  .dark-btn { padding: 7px; border-radius: 50%; background: rgba(0, 0, 0, .35); display: grid; place-items: center; }
+  .dark-btn:hover { background: rgba(0, 0, 0, .55); }
+  .np-body { position: relative; z-index: 2; margin-top: auto; padding: 0 18px 18px; }
+  .np-title { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+  .np-title h2 { font-family: var(--display); font-size: 26px; font-weight: 800; margin: 0; line-height: 1.15; text-shadow: 0 2px 10px rgba(0, 0, 0, .5);
+                 overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .np-title p { margin: 4px 0 0; color: rgba(233, 213, 255, .85); font-weight: 500; }
+  .circle-btn { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
+                border: 1px solid rgba(240, 171, 252, .5); background: rgba(192, 38, 211, .3); }
+  .circle-btn:hover { background: rgba(217, 70, 239, .5); }
+  .circle-btn.on { background: var(--fuchsia); color: #1a0d33; border-color: var(--fuchsia); }
+  .circle-btn.on svg { fill: currentColor; }
+  .np-card { margin-top: 16px; padding: 12px; border-radius: 12px; background: rgba(46, 16, 101, .6); backdrop-filter: blur(10px);
+             border: 1px solid rgba(192, 132, 252, .2); }
+  .np-card .hd { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: #f0abfc; margin-bottom: 8px; letter-spacing: .04em; }
+  .up-next { display: flex; flex-direction: column; gap: 2px; max-height: 210px; overflow-y: auto; }
+  .up-next button { display: flex; align-items: center; gap: 10px; padding: 5px; border-radius: 8px; text-align: left; }
+  .up-next button:hover { background: rgba(107, 33, 168, .45); }
+  .up-next .cover { width: 36px; height: 36px; border-radius: 6px; }
+  .up-next .none { font-size: 12px; color: var(--muted); padding: 4px; }
+
+  /* ---------- Thanh phát nhạc dưới cùng ---------- */
+  footer { position: relative; z-index: 30; height: 82px; padding: 0 16px; display: grid; grid-template-columns: 1fr minmax(0, 1.4fr) 1fr; align-items: center; gap: 16px;
+           background: rgba(9, 4, 18, .9); backdrop-filter: blur(20px); border-top: 1px solid rgba(168, 85, 247, .2); flex-shrink: 0; }
+  .p-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .p-left .cover { width: 54px; height: 54px; border-radius: 8px; border: 1px solid rgba(192, 132, 252, .25); cursor: pointer; }
+  .p-left .t1 { font-family: var(--display); font-weight: 700; }
+  .p-left .like { color: var(--muted); padding: 6px; } .p-left .like:hover { color: #fff; }
+  .p-center { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 620px; width: 100%; justify-self: center; }
+  .ctrls { display: flex; align-items: center; gap: 20px; }
+  .ctrls button { color: rgba(233, 213, 255, .85); display: grid; place-items: center; position: relative; }
+  .ctrls button:hover { color: #fff; }
+  .ctrls .mode { color: rgba(216, 180, 254, .55); }
+  .ctrls .mode.on { color: #f0abfc; }
+  .ctrls .mode.on::after { content: ""; position: absolute; bottom: -7px; width: 4px; height: 4px; border-radius: 50%; background: #f0abfc; }
+  .ctrls .one { position: absolute; font-size: 8px; font-weight: 800; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+  #playBtn { width: 38px; height: 38px; border-radius: 50%; background: #fff; color: #1a0d33; box-shadow: 0 0 20px rgba(217, 70, 239, .5); transition: transform .15s; }
+  #playBtn:hover { transform: scale(1.06); background: #fae8ff; }
+  .seek { width: 100%; display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .seek span { width: 38px; } .seek span:first-child { text-align: right; }
+  input[type=range].slider { -webkit-appearance: none; appearance: none; flex: 1; height: 4px; border-radius: 99px; cursor: pointer; margin: 0;
+         background: linear-gradient(90deg, #e879f9 var(--p, 0%), rgba(233, 213, 255, .2) var(--p, 0%)); }
+  input[type=range].slider::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #fff;
+         box-shadow: 0 0 10px var(--fuchsia); opacity: 0; transition: opacity .15s, transform .15s; }
+  input[type=range].slider:hover::-webkit-slider-thumb, input[type=range].slider:active::-webkit-slider-thumb { opacity: 1; transform: scale(1.2); }
+  input[type=range].slider::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: #fff; }
+  .p-right { display: flex; align-items: center; justify-content: flex-end; gap: 10px; color: var(--muted); }
+  .p-right button { padding: 6px; display: grid; place-items: center; } .p-right button:hover { color: #fff; }
+  .p-right button.on { color: #f0abfc; }
+  #vol { max-width: 110px; }
+  .mini-progress { display: none; }
+
+  /* ---------- Hộp thoại ---------- */
+  dialog { background: #140928; color: var(--text); border: 1px solid rgba(192, 132, 252, .3); border-radius: 24px; padding: 24px;
+           width: min(520px, 94vw); box-shadow: 0 30px 80px rgba(9, 4, 18, .9); }
+  dialog::backdrop { background: rgba(0, 0, 0, .7); backdrop-filter: blur(6px); }
+  .dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+  .dlg-head > div { display: flex; align-items: center; gap: 10px; }
+  .dlg-icon { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(45deg, #c026d3, #9333ea); }
+  .dlg-head h3 { margin: 0; font-family: var(--display); font-size: 18px; }
+  .dlg-head p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .lbl { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: rgba(216, 180, 254, .8); margin-bottom: 10px; }
+  .presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+  .preset { padding: 8px; border-radius: 12px; border: 1px solid rgba(192, 132, 252, .3); background: #120726; text-align: left; font-size: 11px; font-weight: 600; }
+  .preset:hover, .preset.on { border-color: var(--fuchsia); }
+  .preset i { display: block; height: 40px; border-radius: 8px; margin-bottom: 6px; }
+  .row-btns { display: flex; gap: 10px; margin-bottom: 20px; }
+  .soft-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; border-radius: 12px; font-size: 12px; font-weight: 600;
+              background: rgba(59, 7, 100, .6); border: 1px dashed rgba(192, 132, 252, .4); cursor: pointer; }
+  .soft-btn:hover { background: rgba(107, 33, 168, .7); }
+  .soft-btn.solid { border-style: solid; flex: 0 0 auto; }
+  .soft-btn.primary { background: var(--fuchsia); color: #1a0d33; border: 0; font-weight: 800; }
+  .slide-row { padding-top: 14px; border-top: 1px solid rgba(168, 85, 247, .2); display: grid; gap: 14px; }
+  .slide-row .top { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 8px; }
+  .slide-row .top b { color: #f0abfc; font-variant-numeric: tabular-nums; }
+  .slide-row input { width: 100%; }
+  .hint { font-size: 12px; line-height: 1.6; color: var(--muted); margin: 0 0 14px; }
+  .folder { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(59, 7, 100, .5); margin-bottom: 8px; }
+  .folder span { flex: 1; font-weight: 600; } .folder small { color: var(--muted); }
+  .dlg-foot { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+  #toasts { position: fixed; top: 64px; right: 20px; z-index: 60; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+  .toast { padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; background: rgba(46, 16, 101, .95); border: 1px solid rgba(217, 70, 239, .35);
+           box-shadow: 0 10px 30px rgba(0, 0, 0, .5); animation: toastIn .25s ease; max-width: 340px; }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } }
+  .drop { position: fixed; inset: 0; z-index: 70; display: none; place-items: center; font-family: var(--display); font-size: 24px; font-weight: 800;
+          background: rgba(126, 34, 206, .25); border: 3px dashed var(--fuchsia); backdrop-filter: blur(4px); }
+  .drop.show { display: grid; }
+
+  /* ---------- Màn hình vừa: ẩn cột phải, mở bằng nút ---------- */
+  @media (max-width: 1200px) {
+    #np { position: fixed; z-index: 40; right: 8px; top: 64px; bottom: 90px; width: min(360px, calc(100vw - 16px)); box-shadow: -20px 0 60px rgba(0, 0, 0, .6);
+          transform: translateX(110%); transition: transform .3s ease; }
+    body.np-open #np { transform: none; }
+    .np-toggle { display: flex; }
+    .row { grid-template-columns: 34px minmax(0, 1fr) 36px 52px 30px; }
+    .row .alb { display: none; }
+  }
+  /* ---------- Điện thoại ---------- */
+  @media (max-width: 760px) {
+    header { height: auto; padding: 10px 10px 6px; flex-wrap: wrap; gap: 8px; }
+    .brand span { display: none; }
+    .hdr-center { order: 3; flex-basis: 100%; max-width: none; }
+    .hdr-center .round { display: none; }
+    .grad-btn span, .chip span { display: none; }
+    .grad-btn { width: 40px; padding: 0; justify-content: center; }
+    .chip { width: 34px; padding: 0; justify-content: center; }
+    .hdr-right { margin-left: auto; }
+    .workspace { padding: 0 6px 6px; }
+    #lib { display: none; }
+    #main { padding: 14px 12px 24px; }
+    .pills { top: -14px; }
+    .quick { grid-template-columns: 1fr; }
+    .mixes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .mix .play-fab { display: none; }
+    .row { grid-template-columns: minmax(0, 1fr) 36px 44px; padding: 6px; gap: 8px; }
+    .row .n, .row .del { display: none; }
+    .row .like { opacity: 1; }
+    .hero { flex-direction: column; align-items: flex-start; }
+    .hero .cover { width: 140px; height: 140px; }
+    #np { inset: 0; top: 0; bottom: 0; right: 0; width: 100%; border-radius: 0; border: 0; z-index: 50; transform: translateY(100%); }
+    body.np-open .workspace { z-index: 45; }   /* khung Đang phát phủ toàn màn hình, nằm trên cả thanh dưới */
+    #np .np-body { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+    .pills > div { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    .pills > div::-webkit-scrollbar { display: none; }
+    .pill { white-space: nowrap; }
+    .np-toggle { display: none !important; }
+    footer { height: auto; grid-template-columns: minmax(0, 1fr) auto; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); gap: 10px; }
+    .p-center { width: auto; }
+    .ctrls { gap: 18px; }
+    .ctrls .mode, .seek, .p-right, .p-left .like { display: none; }
+    .mini-progress { display: block; position: absolute; top: -1px; left: 0; right: 0; height: 2px; background: rgba(233, 213, 255, .15); }
+    .mini-progress i { display: block; height: 100%; width: 0; background: #e879f9; }
+    #np .np-mobile-ctrls { display: flex !important; }
+    #np .ctrls .mode { display: grid; }
+    #toasts { left: 12px; right: 12px; top: auto; bottom: 90px; align-items: center; }
+  }
+  .np-mobile-ctrls { display: none !important; flex-direction: column; gap: 12px; margin-top: 18px; }
+  .np-mobile-ctrls .ctrls { justify-content: space-between; }
+  .np-mobile-ctrls #playBtn2 { width: 60px; height: 60px; border-radius: 50%; background: #fff; color: #1a0d33; }
+  .np-mobile-ctrls .seek { display: flex !important; }
+</style>
+</head>
+<body>
+<div id="bg-layer" class="bg-obsidian"></div>
+<div id="bg-tint"></div>
+<div id="toasts"></div>
+
+<!-- 1. THANH TRÊN CÙNG -->
+<header>
+  <div class="brand"><img src="icon-192.png" alt=""><span>Nhạc của tôi</span></div>
+  <div class="hdr-center">
+    <button class="round" id="homeBtn" title="Trang chủ"><svg class="i"><use href="#i-home"/></svg></button>
+    <div class="search">
+      <svg class="i sm"><use href="#i-search"/></svg>
+      <input id="search" type="search" placeholder="Bạn muốn nghe gì?" autocomplete="off">
+    </div>
+    <button class="grad-btn" id="bgBtn" title="Đổi hình nền"><svg class="i sm"><use href="#i-palette"/></svg><span>Đổi nền</span></button>
+  </div>
+  <div class="hdr-right">
+    <span id="status" class="t2"></span>
+    <button class="chip warn hidden" id="permBtn" title="Cho phép đọc thư mục nhạc"><svg class="i xs"><use href="#i-lock"/></svg><span>Cho phép đọc thư mục</span></button>
+    <button class="chip hidden" id="installBtn" title="Cài app"><svg class="i xs"><use href="#i-download"/></svg><span>Cài app</span></button>
+    <button class="chip" id="linkBtn" title="Liên kết thư mục nhạc trên máy, tự đồng bộ"><svg class="i xs"><use href="#i-link"/></svg><span>Liên kết thư mục</span></button>
+    <label class="chip" title="Thêm file nhạc"><svg class="i xs"><use href="#i-plus"/></svg><span>Thêm bài</span>
+      <input id="fileIn" type="file" accept="audio/*,.flac,.m4a,.opus" multiple hidden></label>
+  </div>
+</header>
+
+<!-- 2. KHÔNG GIAN 3 CỘT -->
+<div class="workspace">
+  <aside id="lib" class="panel">
+    <div class="lib-top">
+      <div class="lib-title"><svg class="i"><use href="#i-library"/></svg>Thư viện</div>
+      <button class="icon-btn" id="libToggle" title="Mở rộng / thu gọn thư viện"><svg class="i"><use href="#i-library"/></svg></button>
+      <label class="round" title="Thêm thư mục nhạc" style="width:38px;height:38px;cursor:pointer">
+        <svg class="i"><use href="#i-plus"/></svg><input id="dirIn" type="file" webkitdirectory multiple hidden></label>
+    </div>
+    <div class="sep"></div>
+    <div id="libList"></div>
+  </aside>
+
+  <main id="main" class="panel"></main>
+
+  <aside id="np" class="panel">
+    <div class="np-bg none" id="npBg"></div>
+    <div class="np-shade"></div>
+    <div class="np-top">
+      <span id="npCtx">Chưa phát bài nào</span>
+      <button class="dark-btn" id="npClose" title="Đóng"><svg class="i sm"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="np-body">
+      <div class="np-title">
+        <div style="min-width:0"><h2 id="npTitle">Chọn một bài để bắt đầu</h2><p id="npArtist" class="t1"></p></div>
+        <button class="circle-btn" id="npLike" title="Thêm vào Bài hát đã thích"><svg class="i sm"><use href="#i-heart"/></svg></button>
+      </div>
+      <div class="np-mobile-ctrls">
+        <div class="seek"><span id="cur2">0:00</span><input id="seek2" class="slider" type="range" min="0" max="1000" value="0"><span id="tot2">0:00</span></div>
+        <div class="ctrls">
+          <button class="mode" data-act="shuffle"><svg class="i lg"><use href="#i-shuffle"/></svg></button>
+          <button data-act="prev"><svg class="i lg fill"><use href="#i-prev"/></svg></button>
+          <button id="playBtn2" data-act="play"><svg class="i lg fill"><use href="#i-play"/></svg></button>
+          <button data-act="next"><svg class="i lg fill"><use href="#i-next"/></svg></button>
+          <button class="mode" data-act="repeat"><svg class="i lg"><use href="#i-repeat"/></svg><b class="one hidden">1</b></button>
+        </div>
+      </div>
+      <div class="np-card">
+        <div class="hd"><span>TIẾP THEO</span><span id="npCount"></span></div>
+        <div class="up-next" id="upNext"></div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- 3. THANH PHÁT NHẠC -->
+<footer>
+  <div class="mini-progress"><i id="miniBar"></i></div>
+  <div class="p-left">
+    <div class="cover" id="pCover" title="Mở khung Đang phát"><svg class="i"><use href="#i-note"/></svg></div>
+    <div style="min-width:0"><div class="t1" id="pTitle">Chưa phát bài nào</div><div class="t2" id="pArtist"></div></div>
+    <button class="like" id="pLike" title="Thêm vào Bài hát đã thích"><svg class="i sm"><use href="#i-heart"/></svg></button>
+  </div>
+  <div class="p-center">
+    <div class="ctrls">
+      <button class="mode" data-act="shuffle" title="Trộn bài (S)"><svg class="i sm"><use href="#i-shuffle"/></svg></button>
+      <button data-act="prev" title="Bài trước (P)"><svg class="i sm fill"><use href="#i-prev"/></svg></button>
+      <button id="playBtn" data-act="play" title="Phát / Dừng (Space)"><svg class="i sm fill"><use href="#i-play"/></svg></button>
+      <button data-act="next" title="Bài tiếp (N)"><svg class="i sm fill"><use href="#i-next"/></svg></button>
+      <button class="mode" data-act="repeat" title="Lặp lại (R)"><svg class="i sm"><use href="#i-repeat"/></svg><b class="one hidden">1</b></button>
+    </div>
+    <div class="seek"><span id="cur">0:00</span><input id="seek" class="slider" type="range" min="0" max="1000" value="0"><span id="tot">0:00</span></div>
+  </div>
+  <div class="p-right">
+    <button id="queueBtn" title="Khung Đang phát"><svg class="i sm"><use href="#i-queue"/></svg></button>
+    <button id="muteBtn" title="Tắt / bật tiếng (M)"><svg class="i sm"><use href="#i-vol"/></svg></button>
+    <input id="vol" class="slider" type="range" min="0" max="1" step="0.01">
+    <button id="fsBtn" title="Toàn màn hình"><svg class="i sm"><use href="#i-max"/></svg></button>
+  </div>
+</footer>
+
+<!-- 4. HỘP THOẠI ĐỔI NỀN -->
+<dialog id="bgDlg">
+  <div class="dlg-head">
+    <div><div class="dlg-icon"><svg class="i"><use href="#i-sparkle"/></svg></div>
+      <div><h3>Tùy chỉnh hình nền</h3><p>Giữ sắc tím theo phong cách của bạn</p></div></div>
+    <button class="icon-btn" data-close><svg class="i"><use href="#i-x"/></svg></button>
+  </div>
+  <span class="lbl">1. Chủ đề có sẵn</span>
+  <div class="presets">
+    <button class="preset" data-preset="bg-obsidian"><i style="background:linear-gradient(135deg,#581c87,#1e1b4b,#000)"></i>Obsidian</button>
+    <button class="preset" data-preset="bg-nebula"><i style="background:linear-gradient(90deg,#9333ea,#c026d3,#4338ca)"></i>Nebula</button>
+    <button class="preset" data-preset="bg-cyber"><i style="background:linear-gradient(#a21caf,#1a0d33);border:1px solid #c026d3"></i>Cyber Grid</button>
+    <button class="preset" data-preset="bg-velvet"><i style="background:linear-gradient(45deg,#6d28d9,#a855f7)"></i>Velvet</button>
+  </div>
+  <span class="lbl">2. Ảnh nền của bạn (tự phủ sắc tím)</span>
+  <div class="row-btns">
+    <label class="soft-btn"><svg class="i sm"><use href="#i-upload"/></svg>Chọn ảnh từ máy<input id="bgFile" type="file" accept="image/*" hidden></label>
+    <button class="soft-btn solid" id="bgCoverBtn" title="Dùng ảnh bìa bài đang phát làm nền">Theo bìa bài hát</button>
+    <button class="soft-btn solid" id="bgClear">Bỏ ảnh</button>
+  </div>
+  <div class="slide-row">
+    <div><div class="top"><span>Độ phủ tím</span><b id="tintVal">75%</b></div><input id="tint" class="slider" type="range" min="35" max="95" value="75"></div>
+    <div><div class="top"><span>Độ mờ kính các khung</span><b id="blurVal">18px</b></div><input id="blur" class="slider" type="range" min="0" max="32" value="18"></div>
+  </div>
+</dialog>
+
+<!-- 5. HỘP THOẠI THƯ MỤC LIÊN KẾT -->
+<dialog id="folderDlg">
+  <div class="dlg-head">
+    <div><div class="dlg-icon"><svg class="i"><use href="#i-link"/></svg></div>
+      <div><h3>Thư mục liên kết</h3><p>Tự đồng bộ mỗi lần mở app</p></div></div>
+    <button class="icon-btn" data-close><svg class="i"><use href="#i-x"/></svg></button>
+  </div>
+  <p class="hint">App tự quét các thư mục này khi mở (và khi bạn quay lại cửa sổ). Bài mới tự thêm, bài đã xóa khỏi máy tự biến mất. Nhạc phát thẳng từ ổ cứng, không chép vào trình duyệt.</p>
+  <div id="folderList"></div>
+  <div class="dlg-foot">
+    <button class="soft-btn solid primary" id="addFolderBtn"><svg class="i sm"><use href="#i-plus"/></svg>Liên kết thư mục mới</button>
+    <button class="soft-btn solid" id="rescanBtn">Quét lại ngay</button>
+  </div>
+</dialog>
+
+<div class="drop" id="drop">Thả nhạc vào đây</div>
+<audio id="audio"></audio>
+
+<!-- Bộ icon (vẽ tay, không cần tải từ mạng) -->
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-4.2-4-7.4-9-7.4z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.2 1.2"/><path d="M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.2-1.2"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 21V9m-5 5 5-5 5 5M5 3h14"/></symbol>
+  <symbol id="i-library" viewBox="0 0 24 24"><path d="M5 4v16M10 4v16M15 4.5l4.5 15"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+  <symbol id="i-disc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z" stroke="none"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1" stroke="none"/><rect x="14" y="4" width="4" height="16" rx="1" stroke="none"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M5 5.2v13.6a1 1 0 0 0 1.5.8L16 13a1 1 0 0 0 0-1.7L6.5 4.4A1 1 0 0 0 5 5.2z" stroke="none"/><rect x="17" y="4" width="2.6" height="16" rx="1" stroke="none"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M19 5.2v13.6a1 1 0 0 1-1.5.8L8 13a1 1 0 0 1 0-1.7l9.5-6.9a1 1 0 0 1 1.5.8z" stroke="none"/><rect x="4.4" y="4" width="2.6" height="16" rx="1" stroke="none"/></symbol>
+  <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11V10a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+  <symbol id="i-queue" viewBox="0 0 24 24"><path d="M3 6h13M3 12h13M3 18h8M19 14v7M16 18h6"/></symbol>
+  <symbol id="i-vol" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6M16 9l6 6"/></symbol>
+  <symbol id="i-max" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2.5h7.5A2.5 2.5 0 0 1 21 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></symbol>
+</svg>
+
+<script>
+// =====================================================================
+//  LƯU TRỮ (IndexedDB) — nhạc & cài đặt được giữ lại giữa các lần mở
+// =====================================================================
+const DB_NAME = 'my-music', STORE = 'tracks', META = 'meta';
+let db;
+function openDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, 2);
+    r.onupgradeneeded = () => {
+      if (!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE, { keyPath: 'id' });
+      if (!r.result.objectStoreNames.contains(META)) r.result.createObjectStore(META);
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+function tx(mode, store = STORE) { return db.transaction(store, mode).objectStore(store); }
+const req = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const dbAll = () => req(tx('readonly').getAll());
+const dbPut = v => req(tx('readwrite').put(v));
+const dbDel = id => req(tx('readwrite').delete(id));
+const metaGet = k => req(tx('readonly', META).get(k));
+const metaSet = (k, v) => req(tx('readwrite', META).put(v, k));
+
+// =====================================================================
+//  ĐỌC THÔNG TIN BÀI HÁT: ID3 (MP3) và Vorbis comment (FLAC)
+// =====================================================================
+async function readTags(file) {
+  try {
+    const head = new Uint8Array(await file.slice(0, 10).arrayBuffer());
+    if (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) return await readID3(file, head);
+    if (head[0] === 0x66 && head[1] === 0x4C && head[2] === 0x61 && head[3] === 0x43) return await readFLAC(file);
+  } catch (e) { /* file lạ thì bỏ qua thẻ */ }
+  return {};
+}
+async function readID3(file, head) {
+  const tags = {};
+  const ver = head[3];
+  const size = (head[6] << 21) | (head[7] << 14) | (head[8] << 7) | head[9];
+  const buf = new Uint8Array(await file.slice(10, 10 + size).arrayBuffer());
+  let p = 0;
+  const idLen = ver === 2 ? 3 : 4, hdrLen = ver === 2 ? 6 : 10;
+  const map = { TIT2: 'title', TT2: 'title', TPE1: 'artist', TP1: 'artist', TALB: 'album', TAL: 'album', TPE2: 'albumArtist', TP2: 'albumArtist', TRCK: 'track', TRK: 'track' };
+  while (p + hdrLen < buf.length) {
+    const id = String.fromCharCode(...buf.slice(p, p + idLen));
+    if (!/^[A-Z0-9]+$/.test(id)) break;
+    let len;
+    if (ver === 2) len = (buf[p+3] << 16) | (buf[p+4] << 8) | buf[p+5];
+    else if (ver === 4) len = (buf[p+4] << 21) | (buf[p+5] << 14) | (buf[p+6] << 7) | buf[p+7];
+    else len = ((buf[p+4] << 24) | (buf[p+5] << 16) | (buf[p+6] << 8) | buf[p+7]) >>> 0;
+    const data = buf.slice(p + hdrLen, p + hdrLen + len);
+    p += hdrLen + len;
+    if (!len) continue;
+    if (map[id]) tags[map[id]] = decodeText(data[0], data.slice(1));
+    else if ((id === 'APIC' || id === 'PIC') && !tags.picture) tags.picture = readPic(data, ver);
+  }
+  return tags;
+}
+function decodeText(enc, bytes) {
+  const label = enc === 1 ? 'utf-16' : enc === 2 ? 'utf-16be' : enc === 3 ? 'utf-8' : 'windows-1252';
+  return new TextDecoder(label).decode(bytes).replace(/\0+$/g, '').split('\0')[0].trim();
+}
+function readPic(d, ver) {
+  const enc = d[0]; let i = 1, mime;
+  if (ver === 2) { mime = 'image/' + String.fromCharCode(...d.slice(1, 4)).toLowerCase(); i = 4; }
+  else { const s = i; while (d[i]) i++; mime = new TextDecoder().decode(d.slice(s, i)) || 'image/jpeg'; i++; }
+  i++; // loại ảnh
+  if (enc === 1 || enc === 2) { while (i + 1 < d.length && !(d[i] === 0 && d[i+1] === 0)) i += 2; i += 2; }
+  else { while (d[i]) i++; i++; }
+  if (mime === 'image/jpg') mime = 'image/jpeg';
+  return new Blob([d.slice(i)], { type: mime });
+}
+async function readFLAC(file) {
+  const tags = {};
+  let pos = 4;
+  for (let n = 0; n < 64; n++) {
+    const h = new Uint8Array(await file.slice(pos, pos + 4).arrayBuffer());
+    if (h.length < 4) break;
+    const last = h[0] & 0x80, type = h[0] & 0x7F, len = (h[1] << 16) | (h[2] << 8) | h[3];
+    if (type === 4 || (type === 6 && !tags.picture)) {
+      const d = new Uint8Array(await file.slice(pos + 4, pos + 4 + len).arrayBuffer());
+      const dv = new DataView(d.buffer);
+      if (type === 4) {                       // VORBIS_COMMENT (little-endian)
+        let i = 4 + dv.getUint32(0, true);
+        const count = dv.getUint32(i, true); i += 4;
+        const dec = new TextDecoder();
+        for (let k = 0; k < count && i < d.length; k++) {
+          const l = dv.getUint32(i, true); i += 4;
+          const s = dec.decode(d.slice(i, i + l)); i += l;
+          const eq = s.indexOf('='); if (eq < 0) continue;
+          const key = s.slice(0, eq).toUpperCase(), val = s.slice(eq + 1).trim();
+          const map = { TITLE: 'title', ARTIST: 'artist', ALBUM: 'album', ALBUMARTIST: 'albumArtist', TRACKNUMBER: 'track' };
+          if (map[key] && !tags[map[key]]) tags[map[key]] = val;
+        }
+      } else {                                // PICTURE (big-endian)
+        let i = 4;
+        const ml = dv.getUint32(i); i += 4; const mime = new TextDecoder().decode(d.slice(i, i + ml)); i += ml;
+        const dl = dv.getUint32(i); i += 4 + dl + 16;
+        const pl = dv.getUint32(i); i += 4;
+        tags.picture = new Blob([d.slice(i, i + pl)], { type: mime || 'image/jpeg' });
+      }
+    }
+    pos += 4 + len;
+    if (last) break;
+  }
+  return tags;
+}
+function getDuration(blob) {
+  return new Promise(res => {
+    const a = new Audio(); const u = URL.createObjectURL(blob);
+    a.preload = 'metadata'; a.src = u;
+    a.onloadedmetadata = () => { res(a.duration || 0); URL.revokeObjectURL(u); };
+    a.onerror = () => { res(0); URL.revokeObjectURL(u); };
+  });
+}
+
+// =====================================================================
+//  TRẠNG THÁI & TIỆN ÍCH
+// =====================================================================
+const $ = id => document.getElementById(id);
+const $$ = s => document.querySelectorAll(s);
+const audio = $('audio');
+let tracks = [], folders = [];
+let queue = [], queueBase = [], queueCtx = '';
+let curId = null, curUrl = null;
+let view = { type: 'home' };
+const settings = Object.assign({ shuffle: false, repeat: 'off', volume: 0.8, muted: false, bg: 'bg-obsidian', tint: 75, blur: 18, libWide: false, bgFromCover: false },
+                               JSON.parse(localStorage.getItem('mm-settings') || '{}'));
+const saveSettings = () => localStorage.setItem('mm-settings', JSON.stringify(settings));
+const artUrls = new Map();
+const artUrl = t => { if (!t || !t.picture) return null; if (!artUrls.has(t.id)) artUrls.set(t.id, URL.createObjectURL(t.picture)); return artUrls.get(t.id); };
+const fmt = s => { s = Math.floor(s || 0); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const icon = (name, cls = 'sm') => `<svg class="i ${cls}"><use href="#i-${name}"/></svg>`;
+const hue = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+const live = () => tracks.filter(t => !t.hidden);
+const ACCENTS = ['#c084fc', '#e879f9', '#f472b6', '#818cf8', '#a78bfa', '#f0abfc'];
+// Ảnh bìa: dùng ảnh trong file, không có thì tạo khối màu tím theo tên
+function coverStyle(url, seed) {
+  if (url) return `background-image:url(${url})`;
+  const h = 260 + (hue(seed) % 70);
+  return `background-image:linear-gradient(135deg,hsl(${h} 70% 45%),hsl(${(h + 50) % 360} 65% 22%))`;
+}
+function coverHTML(url, seed, ic = 'note', cls = '') {
+  return `<div class="cover ${cls}" style="${coverStyle(url, seed)}">${url ? '' : icon(ic, 'lg')}</div>`;
+}
+function toast(msg) {
+  const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg;
+  $('toasts').appendChild(el); setTimeout(() => el.remove(), 3200);
+}
+function setStatus(msg, keep) {
+  $('status').textContent = msg || '';
+  if (msg && !keep) setTimeout(() => { if ($('status').textContent === msg) $('status').textContent = ''; }, 4000);
+}
+
+// Gom nhóm theo album / ca sĩ
+function albums() {
+  const m = new Map();
+  for (const t of live()) {
+    if (!t.album) continue;
+    const key = t.album + '\u0001' + (t.albumArtist || t.artist);
+    if (!m.has(key)) m.set(key, { key, name: t.album, artist: t.albumArtist || t.artist, list: [], added: 0 });
+    const a = m.get(key); a.list.push(t); a.added = Math.max(a.added, t.added || 0);
+  }
+  for (const a of m.values()) a.list.sort((x, y) => (parseInt(x.track) || 999) - (parseInt(y.track) || 999) || x.title.localeCompare(y.title, 'vi'));
+  return [...m.values()];
+}
+function artists() {
+  const m = new Map();
+  for (const t of live()) {
+    const name = t.artist || 'Không rõ ca sĩ';
+    if (!m.has(name)) m.set(name, { key: name, name, list: [] });
+    m.get(name).list.push(t);
+  }
+  return [...m.values()].sort((a, b) => b.list.length - a.list.length || a.name.localeCompare(b.name, 'vi'));
+}
+const firstArt = list => { for (const t of list) { const u = artUrl(t); if (u) return u; } return null; };
+const liked = () => live().filter(t => t.liked);
+const totalMin = list => Math.max(1, Math.round(list.reduce((s, t) => s + (t.duration || 0), 0) / 60));
+
+// =====================================================================
+//  THÊM BÀI
+// =====================================================================
+const AUDIO_RE = /\.(mp3|m4a|aac|flac|wav|ogg|opus|webm)$/i;
+async function makeTrack(f, extra = {}) {
+  const tags = await readTags(f);
+  const base = f.name.replace(/\.[^.]+$/, '');
+  let title = tags.title, artist = tags.artist;
+  if (!title) { const m = base.split(' - '); if (m.length > 1 && !artist) { artist = m[0].trim(); title = m.slice(1).join(' - ').trim(); } else title = base; }
+  return Object.assign({
+    id: crypto.randomUUID(), name: f.name, size: f.size,
+    title, artist: artist || 'Không rõ ca sĩ', album: tags.album || '', albumArtist: tags.albumArtist || '', track: tags.track || '',
+    picture: tags.picture || null, duration: await getDuration(f), added: Date.now()
+  }, extra);
+}
+async function addFiles(files) {
+  files = [...files].filter(f => f.type.startsWith('audio/') || AUDIO_RE.test(f.name));
+  if (!files.length) return;
+  const existing = new Set(tracks.map(t => t.name + '|' + t.size));
+  let n = 0;
+  for (const f of files) {
+    if (existing.has(f.name + '|' + f.size)) continue;
+    setStatus(`Đang thêm ${++n}/${files.length}…`, true);
+    const t = await makeTrack(f, { blob: f });
+    try { await dbPut(t); } catch (e) { toast('Không lưu được (có thể hết dung lượng): ' + f.name); break; }
+    tracks.push(t);
+  }
+  setStatus('');
+  toast(n ? `Đã thêm ${n} bài` : 'Các bài này đã có rồi');
+  sortTracks(); renderAll();
+}
+function sortTracks() { tracks.sort((a, b) => (a.artist + a.album + a.title).localeCompare(b.artist + b.album + b.title, 'vi')); }
+
+// =====================================================================
+//  THƯ MỤC LIÊN KẾT (tự đồng bộ) — Chrome/Edge trên máy tính
+// =====================================================================
+let scanning = false, lastScan = 0;
+const saveFolders = () => metaSet('folders', folders);
+const PERM = { mode: 'read' };
+async function hasPerm(f, ask) {
+  if (await f.handle.queryPermission(PERM) === 'granted') return true;
+  return ask ? (await f.handle.requestPermission(PERM)) === 'granted' : false;
+}
+async function* walk(dir, prefix = '') {
+  for await (const [name, h] of dir.entries()) {
+    if (h.kind === 'file' && AUDIO_RE.test(name)) yield { path: prefix + name, handle: h };
+    else if (h.kind === 'directory') yield* walk(h, prefix + name + '/');
+  }
+}
+async function scanFolder(folder) {
+  const mine = new Map(tracks.filter(t => t.folderId === folder.id).map(t => [t.path, t]));
+  const seen = new Set(); let added = 0, removed = 0, checked = 0;
+  for await (const { path, handle } of walk(folder.handle)) {
+    seen.add(path);
+    if (++checked % 25 === 0) setStatus(`Đang quét "${folder.name}"… ${checked} file`, true);
+    const file = await handle.getFile();
+    const old = mine.get(path);
+    if (old && old.size === file.size && old.lastModified === file.lastModified) continue;
+    setStatus('Đang đọc: ' + file.name, true);
+    const t = await makeTrack(file, { folderId: folder.id, path, lastModified: file.lastModified,
+                                      ...(old ? { id: old.id, hidden: old.hidden, liked: old.liked, added: old.added } : {}) });
+    await dbPut(t);
+    if (old) tracks[tracks.indexOf(old)] = t; else { tracks.push(t); added++; }
+  }
+  for (const [, t] of mine) {
+    if (seen.has(t.path)) continue;
+    await dbDel(t.id); tracks = tracks.filter(x => x !== t); removed++;
+    if (curId === t.id) { audio.pause(); curId = null; }
+  }
+  return { added, removed };
+}
+async function syncFolders(askPerm) {
+  if (scanning || !folders.length) return;
+  scanning = true; lastScan = Date.now();
+  let added = 0, removed = 0, locked = 0;
+  try {
+    for (const f of folders) {
+      if (!(await hasPerm(f, askPerm))) { locked++; continue; }
+      try { const r = await scanFolder(f); added += r.added; removed += r.removed; }
+      catch (e) { console.warn(e); toast(`Không đọc được thư mục "${f.name}" (có thể đã bị đổi tên hoặc xóa).`); }
+    }
+  } finally { scanning = false; }
+  $('permBtn').classList.toggle('hidden', !locked);
+  setStatus('');
+  sortTracks(); renderAll(); renderFolders();
+  const msg = [added && `+${added} bài mới`, removed && `−${removed} bài đã xóa khỏi máy`].filter(Boolean).join(', ');
+  if (msg) toast(msg);
+}
+async function linkFolder() {
+  if (!window.showDirectoryPicker) { toast('Trình duyệt này chưa hỗ trợ liên kết thư mục. Hãy dùng Chrome hoặc Edge trên máy tính.'); return; }
+  let handle;
+  try { handle = await window.showDirectoryPicker({ mode: 'read', id: 'music' }); } catch { return; }
+  for (const f of folders) if (await f.handle.isSameEntry(handle)) { toast('Thư mục này đã được liên kết rồi.'); return; }
+  folders.push({ id: crypto.randomUUID(), name: handle.name, handle });
+  await saveFolders(); renderFolders();
+  await syncFolders(true);
+}
+async function unlinkFolder(f) {
+  if (!confirm(`Bỏ liên kết "${f.name}"? Các bài trong thư mục này sẽ biến mất khỏi app (file trên máy không bị xóa).`)) return;
+  folders = folders.filter(x => x !== f); await saveFolders();
+  for (const t of tracks.filter(t => t.folderId === f.id)) { await dbDel(t.id); if (curId === t.id) { audio.pause(); curId = null; } }
+  tracks = tracks.filter(t => t.folderId !== f.id);
+  renderAll(); renderFolders();
+}
+function renderFolders() {
+  const box = $('folderList'); box.innerHTML = '';
+  if (!folders.length) box.innerHTML = '<p class="hint">Chưa liên kết thư mục nào.</p>';
+  for (const f of folders) {
+    const row = document.createElement('div'); row.className = 'folder';
+    const n = tracks.filter(t => t.folderId === f.id && !t.hidden).length;
+    row.innerHTML = `${icon('folder')}<span>${esc(f.name)}</span><small>${n} bài</small><button class="icon-btn" title="Bỏ liên kết">${icon('x')}</button>`;
+    row.querySelector('button').onclick = () => unlinkFolder(f);
+    box.appendChild(row);
+  }
+}
+async function getBlob(t) {
+  if (t.blob) return t.blob;
+  const f = folders.find(x => x.id === t.folderId);
+  if (!f) throw new Error('thư mục của bài này không còn liên kết.');
+  if (!(await hasPerm(f, true))) throw new Error('chưa được phép đọc thư mục "' + f.name + '".');
+  const parts = t.path.split('/'); let dir = f.handle;
+  for (const p of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(p);
+  return (await dir.getFileHandle(parts.at(-1))).getFile();
+}
+
+// =====================================================================
+//  GIAO DIỆN: CỘT GIỮA
+// =====================================================================
+const PILLS = [['home', 'Tất cả'], ['songs', 'Bài hát'], ['albums', 'Album'], ['artists', 'Ca sĩ'], ['liked', 'Đã thích']];
+function go(v) { view = v; $('search').value = ''; renderMain(); renderLib(); $('main').scrollTop = 0; }
+
+function renderMain() {
+  const main = $('main');
+  const q = $('search').value.trim().toLowerCase();
+  const active = q ? '' : ['album', 'artist'].includes(view.type) ? '' : view.type;
+  let html = `<div class="pills"><div>${PILLS.map(([k, l]) => `<button class="pill ${active === k ? 'on' : ''}" data-view="${k}">${l}</button>`).join('')}</div>
+    <button class="pill np-toggle" data-np>${icon('panel', 'xs')}&nbsp;Đang phát</button></div>`;
+
+  if (!live().length) {
+    html += `<div class="empty"><h2>Thư viện đang trống</h2>
+      ${window.showDirectoryPicker ? 'Liên kết thư mục nhạc trên máy để app tự lấy nhạc và tự cập nhật,<br>hoặc thêm file / kéo thả nhạc vào cửa sổ này.'
+                                   : 'Bấm “Thêm bài”, mở thư mục nhạc trong máy,<br>giữ ngón tay lên một bài rồi chọn tất cả.'}
+      <div class="acts">${window.showDirectoryPicker ? `<button class="soft-btn solid primary" data-act="link">${icon('link')}Liên kết thư mục</button>` : ''}
+      <button class="soft-btn solid" data-act="add">${icon('plus')}Thêm bài</button></div></div>`;
+    main.innerHTML = html; return;
+  }
+
+  if (q) {
+    const hits = live().filter(t => (t.title + ' ' + t.artist + ' ' + t.album).toLowerCase().includes(q));
+    const al = albums().filter(a => (a.name + ' ' + a.artist).toLowerCase().includes(q)).slice(0, 8);
+    const ar = artists().filter(a => a.name.toLowerCase().includes(q)).slice(0, 8);
+    if (ar.length || al.length) html += `<section><div class="sec-head"><h2 class="sec">Ca sĩ & album</h2></div><div class="mixes">${ar.map(artistCard).join('')}${al.map(albumCard).join('')}</div></section>`;
+    html += `<section><div class="sec-head"><h2 class="sec">Bài hát</h2><span class="t2">${hits.length} kết quả</span></div>${hits.length ? rowsHTML(hits) : '<p class="t2">Không tìm thấy bài nào.</p>'}</section>`;
+    main.innerHTML = html; bindRows(main, hits, `Kết quả tìm “${$('search').value.trim()}”`); return;
+  }
+
+  let list = [], ctx = '';
+  if (view.type === 'home') {
+    const al = albums().sort((a, b) => b.added - a.added);
+    const ar = artists();
+    const quick = [];
+    if (liked().length) quick.push({ kind: 'liked' });
+    for (const a of al) { if (quick.length >= 8) break; quick.push({ kind: 'album', a }); }
+    for (const a of ar) { if (quick.length >= 8) break; quick.push({ kind: 'artist', a }); }
+    html += `<section><div class="quick">${quick.map(quickCard).join('')}</div></section>`;
+    html += `<section><div class="sec-head"><h2 class="sec">Mix của bạn</h2><button class="link" data-view="artists">Xem tất cả</button></div>
+             <div class="mixes">${ar.slice(0, 6).map((a, i) => mixCard(a, i)).join('')}</div></section>`;
+    list = live().slice().sort((a, b) => (b.added || 0) - (a.added || 0)).slice(0, 30); ctx = 'Mới thêm gần đây';
+    html += `<section><div class="sec-head"><h2 class="sec">Mới thêm gần đây</h2><button class="link" data-view="songs">Xem tất cả ${live().length} bài</button></div>${rowsHTML(list)}</section>`;
+  } else if (view.type === 'songs') {
+    list = live(); ctx = 'Tất cả bài hát';
+    html += heroHTML({ kind: 'Danh sách', name: 'Tất cả bài hát', sub: `${list.length} bài • ${totalMin(list)} phút`, art: null, seed: 'all', ic: 'note' });
+    html += rowsHTML(list);
+  } else if (view.type === 'albums') {
+    html += `<section><div class="sec-head"><h2 class="sec">Album</h2></div>${albums().length ? `<div class="mixes">${albums().sort((a, b) => a.name.localeCompare(b.name, 'vi')).map(albumCard).join('')}</div>` : '<p class="t2">Chưa có bài nào mang tên album trong thẻ thông tin.</p>'}</section>`;
+  } else if (view.type === 'artists') {
+    html += `<section><div class="sec-head"><h2 class="sec">Ca sĩ</h2></div><div class="mixes">${artists().map(artistCard).join('')}</div></section>`;
+  } else if (view.type === 'liked') {
+    list = liked(); ctx = 'Bài hát đã thích';
+    html += heroHTML({ kind: 'Danh sách', name: 'Bài hát đã thích', sub: `${list.length} bài`, likedArt: true });
+    html += list.length ? rowsHTML(list) : '<p class="t2">Bấm biểu tượng ♥ ở một bài để thêm vào đây.</p>';
+  } else if (view.type === 'album') {
+    const a = albums().find(x => x.key === view.key);
+    if (!a) return go({ type: 'home' });
+    list = a.list; ctx = 'Album • ' + a.name;
+    html += heroHTML({ kind: 'Album', name: a.name, sub: `${a.artist} • ${list.length} bài • ${totalMin(list)} phút`, art: firstArt(list), seed: a.key, ic: 'disc' });
+    html += rowsHTML(list);
+  } else if (view.type === 'artist') {
+    const a = artists().find(x => x.key === view.key);
+    if (!a) return go({ type: 'home' });
+    list = a.list; ctx = 'Ca sĩ • ' + a.name;
+    html += heroHTML({ kind: 'Ca sĩ', name: a.name, sub: `${list.length} bài • ${totalMin(list)} phút`, art: firstArt(list), seed: a.key, ic: 'user', round: true });
+    html += rowsHTML(list);
+  }
+  main.innerHTML = html;
+  if (list.length) bindRows(main, list, ctx);
+}
+function likedCover(cls = '') { return `<div class="cover ${cls}" style="background-image:linear-gradient(135deg,#4f46e5,#c026d3,#f0abfc)">${icon('heart', 'lg')}</div>`; }
+function quickCard(it) {
+  if (it.kind === 'liked') return `<button class="q-card" data-open="liked">${likedCover()}<span class="t1">Bài hát đã thích</span><span class="play-fab" data-playgroup="liked">${icon('play', 'sm fill')}</span></button>`;
+  const a = it.a, isAlbum = it.kind === 'album';
+  return `<button class="q-card" data-open="${it.kind}" data-key="${esc(a.key)}">${coverHTML(firstArt(a.list), a.key, isAlbum ? 'disc' : 'user')}
+    <span class="t1">${esc(a.name)}</span><span class="play-fab" data-playgroup="${it.kind}" data-key="${esc(a.key)}">${icon('play', 'sm fill')}</span></button>`;
+}
+function mixCard(a, i) {
+  const c = ACCENTS[i % ACCENTS.length];
+  const others = [...new Set(a.list.map(t => t.album).filter(Boolean))].slice(0, 2).join(', ');
+  return `<button class="mix" data-open="artist" data-key="${esc(a.key)}"><div class="art">${coverHTML(firstArt(a.list), a.key, 'user')}<div class="shade"></div>
+    <div class="label"><i style="background:${c}"></i><span class="t1">Mix ${esc(a.name)}</span></div></div>
+    <span class="play-fab" data-playgroup="artist" data-key="${esc(a.key)}">${icon('play', 'sm fill')}</span>
+    <div class="t2">${a.list.length} bài${others ? ' • ' + esc(others) : ''}</div></button>`;
+}
+function albumCard(a) {
+  return `<button class="mix" data-open="album" data-key="${esc(a.key)}"><div class="art">${coverHTML(firstArt(a.list), a.key, 'disc')}</div>
+    <span class="play-fab" data-playgroup="album" data-key="${esc(a.key)}">${icon('play', 'sm fill')}</span>
+    <div class="t1" style="font-family:var(--display);font-weight:700">${esc(a.name)}</div><div class="t2">${esc(a.artist)}</div></button>`;
+}
+function artistCard(a) {
+  return `<button class="mix round-art" data-open="artist" data-key="${esc(a.key)}"><div class="art">${coverHTML(firstArt(a.list), a.key, 'user')}</div>
+    <span class="play-fab" data-playgroup="artist" data-key="${esc(a.key)}">${icon('play', 'sm fill')}</span>
+    <div class="t1" style="font-family:var(--display);font-weight:700">${esc(a.name)}</div><div class="t2">Ca sĩ • ${a.list.length} bài</div></button>`;
+}
+function heroHTML(o) {
+  const cv = o.likedArt ? likedCover() : coverHTML(o.art, o.seed, o.ic);
+  return `<div class="hero ${o.round ? 'artist' : ''}">${cv}<div style="min-width:0"><div class="kind">${o.kind}</div><h1>${esc(o.name)}</h1><div class="t2">${esc(o.sub)}</div></div></div>
+    <div class="hero-actions"><button class="big-play" data-act="playall" title="Phát">${icon('play', 'lg fill')}</button>
+    <button class="ghost-btn" data-act="shuffleall">${icon('shuffle')}Phát ngẫu nhiên</button></div>`;
+}
+function rowsHTML(list) {
+  return `<div class="rows ${audio.paused ? 'paused' : ''}">${list.map((t, i) => {
+    const playing = t.id === curId;
+    return `<div class="row ${playing ? 'playing' : ''}" data-id="${t.id}">
+      <div class="n">${playing ? '<span class="eq"><b></b><b></b><b></b></span>' : i + 1}</div>
+      <div class="who">${coverHTML(artUrl(t), t.album || t.title)}<div style="min-width:0"><div class="t1">${esc(t.title)}</div><div class="t2">${esc(t.artist)}</div></div></div>
+      <div class="alb">${esc(t.album)}</div>
+      <button class="like ${t.liked ? 'on' : ''}" data-like="${t.id}" title="${t.liked ? 'Bỏ thích' : 'Thích'}">${icon('heart')}</button>
+      <div class="dur">${fmt(t.duration)}</div>
+      <button class="del" data-del="${t.id}" title="${t.folderId ? 'Ẩn khỏi app' : 'Xóa khỏi thư viện'}">${icon('x')}</button></div>`;
+  }).join('')}</div>`;
+}
+function bindRows(root, list, ctx) {
+  root._list = list; root._ctx = ctx;
+}
+
+// =====================================================================
+//  GIAO DIỆN: CỘT TRÁI (thư viện)
+// =====================================================================
+function renderLib() {
+  const box = $('libList');
+  const items = [];
+  if (liked().length) items.push(`<button class="lib-item ${view.type === 'liked' ? 'active' : ''}" data-open="liked" title="Bài hát đã thích">${likedCover()}
+    <div class="meta"><div class="t1">Bài hát đã thích</div><div class="t2">Danh sách • ${liked().length} bài</div></div></button>`);
+  const al = albums().sort((a, b) => b.added - a.added);
+  const groups = al.length ? al.map(a => ({ kind: 'album', a, sub: 'Album • ' + a.artist, ic: 'disc' }))
+                           : artists().map(a => ({ kind: 'artist', a, sub: 'Ca sĩ • ' + a.list.length + ' bài', ic: 'user' }));
+  for (const g of groups.slice(0, 60)) {
+    const on = view.type === g.kind && view.key === g.a.key;
+    items.push(`<button class="lib-item ${on ? 'active' : ''}" data-open="${g.kind}" data-key="${esc(g.a.key)}" title="${esc(g.a.name)}">
+      ${coverHTML(firstArt(g.a.list), g.a.key, g.ic)}<div class="meta"><div class="t1">${esc(g.a.name)}</div><div class="t2">${esc(g.sub)}</div></div></button>`);
+  }
+  box.innerHTML = items.join('');
+  $('lib').classList.toggle('wide', settings.libWide);
+}
+
+// =====================================================================
+//  GIAO DIỆN: ĐANG PHÁT (cột phải + thanh dưới)
+// =====================================================================
+function renderNow() {
+  const t = tracks.find(x => x.id === curId);
+  const art = artUrl(t);
+  $('pTitle').textContent = t ? t.title : 'Chưa phát bài nào';
+  $('pArtist').textContent = t ? t.artist : '';
+  const pc = $('pCover'); pc.setAttribute('style', t ? coverStyle(art, t.album || t.title) : ''); pc.innerHTML = art ? '' : icon('note');
+  $('npTitle').textContent = t ? t.title : 'Chọn một bài để bắt đầu';
+  $('npArtist').textContent = t ? t.artist : '';
+  $('npCtx').textContent = t ? (queueCtx || 'Đang phát') : 'Chưa phát bài nào';
+  const bg = $('npBg'); bg.classList.toggle('none', !art); bg.style.backgroundImage = art ? `url(${art})` : '';
+  for (const b of [$('pLike'), $('npLike')]) { b.classList.toggle('on', !!(t && t.liked)); b.disabled = !t; }
+  // Tiếp theo
+  const i = queue.indexOf(curId);
+  const next = [];
+  for (let k = 1; k <= 8 && queue.length; k++) {
+    let j = i + k;
+    if (j >= queue.length) { if (settings.repeat !== 'all') break; j %= queue.length; }
+    if (queue[j] === curId) break;
+    const n = tracks.find(x => x.id === queue[j]); if (n) next.push(n);
+  }
+  $('npCount').textContent = queue.length ? `${Math.max(queue.length - i - 1, 0)} bài còn lại` : '';
+  $('upNext').innerHTML = next.length ? next.map(n => `<button data-jump="${n.id}">${coverHTML(artUrl(n), n.album || n.title)}<div style="min-width:0"><div class="t1">${esc(n.title)}</div><div class="t2">${esc(n.artist)}</div></div></button>`).join('')
+                                      : `<div class="none">${t ? 'Hết danh sách. Bật lặp lại để nghe tiếp.' : 'Danh sách chờ đang trống.'}</div>`;
+  document.title = t ? `${t.title} • ${t.artist}` : 'Nhạc của tôi';
+  if ('mediaSession' in navigator && t) {
+    navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist, album: t.album,
+      artwork: art ? [{ src: art, sizes: '512x512', type: t.picture.type }] : [] });
+  }
+  if (settings.bgFromCover) applyBg();
+}
+function renderPlayState() {
+  const p = !audio.paused;
+  for (const b of [$('playBtn'), $('playBtn2')]) b.innerHTML = icon(p ? 'pause' : 'play', (b.id === 'playBtn2' ? 'lg' : 'sm') + ' fill');
+  $$('.rows').forEach(r => r.classList.toggle('paused', !p));
+}
+function renderModes() {
+  $$('[data-act="shuffle"]').forEach(b => b.classList.toggle('on', settings.shuffle));
+  $$('[data-act="repeat"]').forEach(b => { b.classList.toggle('on', settings.repeat !== 'off'); b.querySelector('.one').classList.toggle('hidden', settings.repeat !== 'one'); });
+  $('muteBtn').innerHTML = icon(settings.muted || settings.volume === 0 ? 'mute' : 'vol');
+}
+function renderAll() { renderMain(); renderLib(); renderNow(); renderPlayState(); renderModes(); }
+// Cập nhật nhẹ khi đổi bài (không vẽ lại cả trang)
+function markPlayingRows() {
+  $$('.row').forEach(r => {
+    const on = r.dataset.id === curId;
+    if (on === r.classList.contains('playing')) return;
+    r.classList.toggle('playing', on);
+    const n = r.querySelector('.n');
+    n.innerHTML = on ? '<span class="eq"><b></b><b></b><b></b></span>' : [...r.parentNode.children].indexOf(r) + 1;
+  });
+}
+
+// =====================================================================
+//  PHÁT NHẠC
+// =====================================================================
+function shuffled(ids, first) {
+  const a = ids.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  if (first && a.includes(first)) { a.splice(a.indexOf(first), 1); a.unshift(first); }
+  return a;
+}
+function playList(list, startId, ctx, forceShuffle) {
+  if (!list.length) return;
+  if (forceShuffle) { settings.shuffle = true; saveSettings(); renderModes(); }
+  queueBase = list.map(t => t.id); queueCtx = ctx || '';
+  queue = settings.shuffle ? shuffled(queueBase, startId) : queueBase.slice();
+  play(startId || queue[0]);
+}
+async function play(id) {
+  const t = tracks.find(x => x.id === id); if (!t) return;
+  let blob;
+  try { blob = await getBlob(t); }
+  catch (e) { toast(`Không mở được "${t.title}": ${e.message}`); if (folders.length) $('permBtn').classList.remove('hidden'); return; }
+  if (curUrl) URL.revokeObjectURL(curUrl);
+  curUrl = URL.createObjectURL(blob);
+  curId = id; audio.src = curUrl;
+  audio.play().catch(() => {});
+  renderNow(); markPlayingRows();
+}
+function step(dir, auto) {
+  if (!queue.length) { const l = live(); if (l.length) playList(l, null, 'Tất cả bài hát'); return; }
+  if (!curId) return play(queue[0]);
+  if (!auto && dir < 0 && audio.currentTime > 3) { audio.currentTime = 0; return; }
+  let i = queue.indexOf(curId) + dir;
+  if (i >= queue.length) { if (settings.repeat === 'all' || !auto) i = 0; else { audio.pause(); return; } }
+  if (i < 0) i = queue.length - 1;
+  play(queue[i]);
+}
+function togglePlay() { if (!curId) return step(1); audio.paused ? audio.play() : audio.pause(); }
+function toggleShuffle() {
+  settings.shuffle = !settings.shuffle; saveSettings();
+  if (queueBase.length) queue = settings.shuffle ? shuffled(queueBase, curId) : queueBase.slice();
+  renderModes(); renderNow(); toast(settings.shuffle ? 'Đã bật trộn bài' : 'Đã tắt trộn bài');
+}
+function cycleRepeat() {
+  settings.repeat = { off: 'all', all: 'one', one: 'off' }[settings.repeat]; saveSettings();
+  renderModes(); renderNow(); toast({ off: 'Tắt lặp lại', all: 'Lặp lại cả danh sách', one: 'Lặp lại một bài' }[settings.repeat]);
+}
+async function toggleLike(id) {
+  const t = tracks.find(x => x.id === id); if (!t) return;
+  t.liked = !t.liked; await dbPut(t);
+  toast(t.liked ? 'Đã thêm vào Bài hát đã thích' : 'Đã bỏ khỏi Bài hát đã thích');
+  $$(`[data-like="${id}"]`).forEach(b => b.classList.toggle('on', t.liked));
+  renderLib(); renderNow();
+  if (view.type === 'liked' || view.type === 'home') renderMain();
+}
+async function removeTrack(id) {
+  const t = tracks.find(x => x.id === id); if (!t) return;
+  if (t.folderId) { if (!confirm(`Ẩn "${t.title}" khỏi app? (File trên máy không bị xóa.)`)) return; t.hidden = true; await dbPut(t); }
+  else { if (!confirm(`Xóa "${t.title}" khỏi thư viện?`)) return; await dbDel(t.id); tracks = tracks.filter(x => x.id !== id); }
+  if (curId === id) { audio.pause(); curId = null; }
+  queue = queue.filter(x => x !== id); queueBase = queueBase.filter(x => x !== id);
+  renderAll();
+}
+function groupList(kind, key) {
+  if (kind === 'liked') return [liked(), 'Bài hát đã thích'];
+  if (kind === 'album') { const a = albums().find(x => x.key === key); return a ? [a.list, 'Album • ' + a.name] : [[], '']; }
+  if (kind === 'artist') { const a = artists().find(x => x.key === key); return a ? [a.list, 'Ca sĩ • ' + a.name] : [[], '']; }
+  return [[], ''];
+}
+
+// =====================================================================
+//  HÌNH NỀN
+// =====================================================================
+let bgImageUrl = null;
+function applyBg() {
+  const layer = $('bg-layer');
+  const t = settings.bgFromCover && tracks.find(x => x.id === curId);
+  const img = (t && artUrl(t)) || bgImageUrl;
+  layer.className = img ? '' : settings.bg;
+  layer.style.backgroundImage = img ? `url(${img})` : '';
+  if (img) layer.style.filter = settings.bgFromCover ? 'blur(30px) saturate(1.3)' : ''; else layer.style.filter = '';
+  if (img) layer.style.transform = settings.bgFromCover ? 'scale(1.15)' : ''; else layer.style.transform = '';
+  document.documentElement.style.setProperty('--tint', settings.tint / 100);
+  document.documentElement.style.setProperty('--panel-blur', settings.blur + 'px');
+  $('tint').value = settings.tint; $('tintVal').textContent = settings.tint + '%';
+  $('blur').value = settings.blur; $('blurVal').textContent = settings.blur + 'px';
+  setFill($('tint')); setFill($('blur'));
+  $$('.preset').forEach(b => b.classList.toggle('on', !img && b.dataset.preset === settings.bg));
+  $('bgCoverBtn').classList.toggle('primary', settings.bgFromCover);
+}
+
+// =====================================================================
+//  SỰ KIỆN
+// =====================================================================
+const setFill = el => el.style.setProperty('--p', ((el.value - el.min) / (el.max - el.min) * 100) + '%');
+audio.onplay = audio.onpause = renderPlayState;
+audio.onended = () => { if (settings.repeat === 'one') { audio.currentTime = 0; audio.play(); } else step(1, true); };
+let seeking = false;
+audio.ontimeupdate = () => {
+  const d = audio.duration || 0, c = audio.currentTime;
+  for (const [cur, tot] of [['cur', 'tot'], ['cur2', 'tot2']]) { $(cur).textContent = fmt(c); $(tot).textContent = fmt(d); }
+  if (!seeking && d) for (const s of [$('seek'), $('seek2')]) { s.value = c / d * 1000; setFill(s); }
+  $('miniBar').style.width = d ? (c / d * 100) + '%' : 0;
+};
+for (const s of [$('seek'), $('seek2')]) {
+  s.oninput = () => { seeking = true; setFill(s); $('cur').textContent = $('cur2').textContent = fmt(s.value / 1000 * (audio.duration || 0)); };
+  s.onchange = () => { if (audio.duration) audio.currentTime = s.value / 1000 * audio.duration; seeking = false; };
+}
+function applyVolume() { audio.volume = settings.volume; audio.muted = settings.muted; $('vol').value = settings.muted ? 0 : settings.volume; setFill($('vol')); renderModes(); }
+$('vol').oninput = () => { settings.volume = +$('vol').value; settings.muted = false; saveSettings(); applyVolume(); };
+$('muteBtn').onclick = () => { settings.muted = !settings.muted; saveSettings(); applyVolume(); };
+$('fsBtn').onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {});
+
+// Một bộ xử lý click chung cho cả trang
+document.addEventListener('click', async e => {
+  const el = e.target.closest('[data-act],[data-view],[data-open],[data-playgroup],[data-like],[data-del],[data-jump],[data-np],[data-close],[data-preset],.row');
+  if (!el) return;
+  const d = el.dataset;
+  if (d.playgroup !== undefined) { e.stopPropagation(); const [l, c] = groupList(d.playgroup, d.key); return playList(l, null, c); }
+  if (d.like) { e.stopPropagation(); return toggleLike(d.like); }
+  if (d.del) { e.stopPropagation(); return removeTrack(d.del); }
+  if (d.jump) return play(d.jump);
+  if (d.np !== undefined) return document.body.classList.toggle('np-open');
+  if (d.close !== undefined) return el.closest('dialog').close();
+  if (d.preset) { settings.bg = d.preset; settings.bgFromCover = false; bgImageUrl = null; await metaSet('bgImage', null); saveSettings(); return applyBg(); }
+  if (d.view) return go({ type: d.view });
+  if (d.open) return go({ type: d.open, key: d.key });
+  if (el.classList.contains('row')) { const m = $('main'); return playList(m._list || live(), el.dataset.id, m._ctx); }
+  switch (d.act) {
+    case 'play': return togglePlay();
+    case 'next': return step(1);
+    case 'prev': return step(-1);
+    case 'shuffle': return toggleShuffle();
+    case 'repeat': return cycleRepeat();
+    case 'playall': return playList($('main')._list || [], null, $('main')._ctx);
+    case 'shuffleall': { const l = $('main')._list || []; return playList(l, l[Math.floor(Math.random() * l.length)]?.id, $('main')._ctx, true); }
+    case 'link': return linkFolder();
+    case 'add': return $('fileIn').click();
+  }
+});
+$('homeBtn').onclick = () => go({ type: 'home' });
+$('search').oninput = () => renderMain();
+$('libToggle').onclick = () => { settings.libWide = !settings.libWide; saveSettings(); renderLib(); };
+$('pLike').onclick = $('npLike').onclick = () => curId && toggleLike(curId);
+$('pCover').onclick = $('queueBtn').onclick = () => document.body.classList.toggle('np-open');
+$('npClose').onclick = () => document.body.classList.remove('np-open');
+$('fileIn').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
+$('dirIn').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
+$('linkBtn').onclick = () => { if (!folders.length) linkFolder(); else { renderFolders(); $('folderDlg').showModal(); } };
+$('addFolderBtn').onclick = () => { $('folderDlg').close(); linkFolder(); };
+$('rescanBtn').onclick = () => { $('folderDlg').close(); syncFolders(true); };
+$('permBtn').onclick = () => syncFolders(true);
+$('bgBtn').onclick = () => $('bgDlg').showModal();
+$('tint').oninput = e => { settings.tint = +e.target.value; saveSettings(); applyBg(); };
+$('blur').oninput = e => { settings.blur = +e.target.value; saveSettings(); applyBg(); };
+$('bgFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  await metaSet('bgImage', f); bgImageUrl = URL.createObjectURL(f); settings.bgFromCover = false; saveSettings(); applyBg(); toast('Đã đổi ảnh nền');
+};
+$('bgClear').onclick = async () => { await metaSet('bgImage', null); bgImageUrl = null; settings.bgFromCover = false; saveSettings(); applyBg(); };
+$('bgCoverBtn').onclick = () => { settings.bgFromCover = !settings.bgFromCover; saveSettings(); applyBg(); toast(settings.bgFromCover ? 'Nền sẽ đổi theo bìa bài đang phát' : 'Đã tắt nền theo bìa'); };
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Date.now() - lastScan > 30000) syncFolders(false);
+});
+
+// Phím tắt
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' && e.target.type !== 'range') return;
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  else if (e.code === 'ArrowRight') audio.currentTime += 5;
+  else if (e.code === 'ArrowLeft') audio.currentTime -= 5;
+  else if (e.key === 'n') step(1);
+  else if (e.key === 'p') step(-1);
+  else if (e.key === 's') toggleShuffle();
+  else if (e.key === 'r') cycleRepeat();
+  else if (e.key === 'm') $('muteBtn').click();
+  else if (e.key === '/') { e.preventDefault(); $('search').focus(); }
+});
+
+// Kéo thả
+let dragDepth = 0;
+addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; $('drop').classList.add('show'); });
+addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('drop').classList.remove('show'); } });
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => { e.preventDefault(); dragDepth = 0; $('drop').classList.remove('show'); addFiles(e.dataTransfer.files); });
+
+// Phím media / màn hình khóa
+if ('mediaSession' in navigator) {
+  navigator.mediaSession.setActionHandler('play', () => audio.play());
+  navigator.mediaSession.setActionHandler('pause', () => audio.pause());
+  navigator.mediaSession.setActionHandler('nexttrack', () => step(1));
+  navigator.mediaSession.setActionHandler('previoustrack', () => step(-1));
+}
+
+// PWA: chạy offline + nút cài app
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js');
+let installPrompt;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; $('installBtn').classList.remove('hidden'); });
+$('installBtn').onclick = async () => { if (!installPrompt) return; installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; $('installBtn').classList.add('hidden'); };
+addEventListener('appinstalled', () => $('installBtn').classList.add('hidden'));
+if (!window.showDirectoryPicker) $('linkBtn').classList.add('hidden');
+
+// Khởi động
+(async () => {
+  try {
+    db = await openDB(); tracks = await dbAll(); folders = (await metaGet('folders')) || [];
+    const img = await metaGet('bgImage'); if (img) bgImageUrl = URL.createObjectURL(img);
+    if (navigator.storage?.persist) navigator.storage.persist();
+  } catch (e) { toast('Trình duyệt không cho lưu thư viện, nhạc chỉ giữ đến khi đóng trang.'); }
+  sortTracks(); applyVolume(); applyBg(); renderAll();
+  syncFolders(false);
+})();
+</script>
+</body>
+</html>
