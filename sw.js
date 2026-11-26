@@ -1,8 +1,8 @@
 // Service worker: lưu giao diện app để mở được khi không có mạng.
 // Khi sửa app, tăng số phiên bản này để điện thoại tải bản mới.
-const VERSION = 'v3';
+const VERSION = 'v4';
 const SHELL = ['./', './index.html', './manifest.webmanifest',
-               './icon-192.png', './icon-512.png', './icon-maskable.png', './apple-touch-icon.png'];
+               './icon-192.png', './icon-512.png', './icon-maskable.png', './apple-touch-icon.png', './favicon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
