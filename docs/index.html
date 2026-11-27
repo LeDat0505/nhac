@@ -338,6 +338,8 @@
   .slide-row .top { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 8px; }
   .slide-row .top b { color: #f0abfc; font-variant-numeric: tabular-nums; }
   .slide-row input { width: 100%; }
+  .diag { font: 11px/1.5 ui-monospace, monospace; white-space: pre-wrap; word-break: break-all; background: rgba(0,0,0,.35); border: 1px solid var(--line);
+          border-radius: 10px; padding: 10px; margin: 0 0 14px; max-height: 40vh; overflow: auto; color: #e9d5ff; user-select: text; }
   .hint { font-size: 12px; line-height: 1.6; color: var(--muted); margin: 0 0 14px; }
   .folder { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(59, 7, 100, .5); margin-bottom: 8px; }
   .folder span { flex: 1; font-weight: 600; } .folder small { color: var(--muted); }
@@ -552,7 +554,9 @@
   <div class="row-btns">
     <button class="soft-btn solid" id="autoplayBtn" title="Hết danh sách thì tự nối thêm bài hợp gu thay vì dừng">Tự phát tiếp</button>
     <button class="soft-btn solid" id="fadeBtn" title="Cuối bài nhỏ dần, đầu bài sau to dần (iPhone không hỗ trợ)">Chuyển bài mượt</button>
+    <button class="soft-btn solid" id="diagBtn" title="Xem vì sao thanh điều khiển trên thông báo không hiện">Kiểm tra thông báo</button>
   </div>
+  <pre id="diagOut" class="diag hidden"></pre>
   <div class="slide-row">
     <div><div class="top"><span>Độ phủ tím</span><b id="tintVal">75%</b></div><input id="tint" class="slider" type="range" min="35" max="95" value="75"></div>
     <div><div class="top"><span>Độ mờ kính các khung</span><b id="blurVal">18px</b></div><input id="blur" class="slider" type="range" min="0" max="32" value="18"></div>
@@ -2259,6 +2263,32 @@ if ('mediaSession' in navigator) {
   audio.addEventListener('pause', () => { ms.playbackState = 'paused'; updatePositionState(); });
   for (const ev of ['loadedmetadata', 'seeked', 'ratechange']) audio.addEventListener(ev, updatePositionState);
 }
+
+// Chẩn đoán thanh điều khiển trên thông báo: ghi lại sự kiện phát nhạc + trạng thái, để chụp màn hình gửi lại
+window.APP_VER = 'v20';   // nhớ tăng cùng VERSION trong sw.js
+const diagLog = [];
+const dlog = m => { diagLog.push(new Date().toTimeString().slice(0, 8) + ' ' + m); if (diagLog.length > 40) diagLog.shift(); if (!$('diagOut').classList.contains('hidden')) renderDiag(); };
+for (const ev of ['play', 'playing', 'pause', 'ended', 'stalled', 'waiting', 'error', 'emptied', 'loadedmetadata'])
+  audio.addEventListener(ev, () => dlog('audio ' + ev + (ev === 'error' ? ' ' + (audio.error?.code || '') : '') + (ev === 'loadedmetadata' ? ' dur=' + audio.duration : '')));
+document.addEventListener('visibilitychange', () => dlog('trang ' + document.visibilityState + (audio.paused ? ' (nhạc dừng)' : ' (nhạc đang phát)')));
+addEventListener('pagehide', () => dlog('pagehide')); document.addEventListener('freeze', () => dlog('freeze')); document.addEventListener('resume', () => dlog('resume'));
+function renderDiag() {
+  const ms = navigator.mediaSession, md = ms?.metadata;
+  const srcKind = !audio.src ? '(trống)' : audio.src.startsWith('blob:') ? 'blob (trong máy)' : audio.src.includes('/api/songs/') ? 'trực tuyến' : audio.src.slice(0, 30);
+  $('diagOut').textContent = [
+    'Phiên bản app: ' + (window.APP_VER || '?') + ' • ' + (matchMedia('(display-mode: standalone)').matches ? 'app đã cài' : 'tab trình duyệt'),
+    'Trình duyệt: ' + navigator.userAgent.replace(/^Mozilla\/5\.0 /, ''),
+    'Media Session: ' + (ms ? 'có' : 'KHÔNG HỖ TRỢ') + ' • MediaMetadata: ' + (typeof MediaMetadata),
+    'Thông tin bài: ' + (md ? `"${md.title}" / ${md.artist} / ảnh: ${(md.artwork[0]?.src || '').slice(0, 40)}` : '(chưa đặt)'),
+    'Trạng thái: ' + (ms?.playbackState || '?') + ' • Web Audio: ' + (beat.ctx ? 'CÓ (' + beat.ctx.state + ')' : 'không'),
+    `Nhạc: ${audio.paused ? 'đang dừng' : 'đang phát'} • nguồn: ${srcKind} • dài: ${audio.duration} • tại: ${audio.currentTime.toFixed(1)}`,
+    `Âm lượng: ${audio.volume.toFixed(2)} • tắt tiếng: ${audio.muted} • readyState: ${audio.readyState} • lỗi: ${audio.error?.code || 'không'}`,
+    'Quyền thông báo (web): ' + (window.Notification ? Notification.permission : 'không có'),
+    '— Sự kiện —', ...diagLog.slice(-20)
+  ].join('\n');
+}
+$('diagBtn').onclick = () => { $('diagOut').classList.toggle('hidden'); renderDiag(); };
+setInterval(() => { if (!$('diagOut').classList.contains('hidden') && !document.hidden) renderDiag(); }, 1000);
 
 // PWA: chạy offline + nút cài app
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js');
