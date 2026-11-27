@@ -1710,10 +1710,7 @@ function renderNow() {
   $('upNext').innerHTML = next.length ? next.map(n => `<button data-jump="${n.id}">${coverHTML(artUrl(n), n.album || n.title)}<div style="min-width:0"><div class="t1">${esc(n.title)}</div><div class="t2">${esc(n.artist)}</div></div></button>`).join('')
                                       : `<div class="none">${!t ? 'Danh sách chờ đang trống.' : settings.autoplay ? 'Hết danh sách: sẽ tự phát tiếp bài hợp gu của bạn.' : 'Hết danh sách. Bật lặp lại hoặc Tự phát tiếp để nghe tiếp.'}</div>`;
   document.title = t ? `${t.title} • ${t.artist}` : 'Nhạc của tôi';
-  if ('mediaSession' in navigator && t) {
-    navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist, album: t.album,
-      artwork: art ? [{ src: new URL(art, location.href).href, sizes: '512x512', type: t.picture?.type || 'image/jpeg' }] : [] });
-  }
+  if ('mediaSession' in navigator && t) updateMediaSession(t, art);
   if (settings.bgFromCover) applyBg();
   loadLyrics();
 }
@@ -2157,11 +2154,54 @@ addEventListener('dragover', e => e.preventDefault());
 addEventListener('drop', e => { e.preventDefault(); dragDepth = 0; $('drop').classList.remove('show'); addFiles(e.dataTransfer.files); });
 
 // Phím media / màn hình khóa
+// ---------- Thanh điều khiển trên thông báo / màn hình khóa (Media Session) ----------
+// Ảnh bìa: Android không đọc được link "blob:" → chuyển ảnh trong máy sang ảnh nhỏ dạng data: (lưu tạm theo bài)
+const msArt = new Map();
+async function artForSession(t, art) {
+  if (!art) return [{ src: new URL('icon-512.png', location.href).href, sizes: '512x512', type: 'image/png' }];
+  if (!art.startsWith('blob:')) return [{ src: new URL(art, location.href).href, sizes: '512x512', type: 'image/jpeg' }];
+  if (!msArt.has(t.id)) {
+    try {
+      const bmp = await createImageBitmap(t.picture);
+      const c = document.createElement('canvas'); c.width = c.height = 384;
+      const g = c.getContext('2d'), s = Math.min(bmp.width, bmp.height);
+      g.drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, 384, 384);
+      msArt.set(t.id, c.toDataURL('image/jpeg', 0.85));
+    } catch { msArt.set(t.id, null); }
+  }
+  const d = msArt.get(t.id);
+  return d ? [{ src: d, sizes: '384x384', type: 'image/jpeg' }] : [{ src: new URL('icon-512.png', location.href).href, sizes: '512x512', type: 'image/png' }];
+}
+async function updateMediaSession(t, art) {
+  // hiện tên bài ngay (tạm dùng icon app), rồi thay ảnh bìa khi đã xử lý xong
+  if (art && art.startsWith('blob:') && !msArt.has(t.id))
+    navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist, album: t.album || 'Nhạc của tôi',
+      artwork: [{ src: new URL('icon-512.png', location.href).href, sizes: '512x512', type: 'image/png' }] });
+  const artwork = await artForSession(t, art);
+  if (t.id !== curId) return;   // đã chuyển bài trong lúc xử lý ảnh
+  navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist, album: t.album || 'Nhạc của tôi', artwork });
+}
+// Thanh thời gian trên thông báo (để tua được như Spotify)
+function updatePositionState() {
+  if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
+  const d = audio.duration;
+  if (!d || !isFinite(d)) return;
+  try { navigator.mediaSession.setPositionState({ duration: d, playbackRate: audio.playbackRate || 1, position: Math.min(audio.currentTime, d) }); } catch { }
+}
 if ('mediaSession' in navigator) {
-  navigator.mediaSession.setActionHandler('play', () => audio.play());
-  navigator.mediaSession.setActionHandler('pause', () => audio.pause());
-  navigator.mediaSession.setActionHandler('nexttrack', () => step(1));
-  navigator.mediaSession.setActionHandler('previoustrack', () => step(-1));
+  const ms = navigator.mediaSession;
+  const on = (action, fn) => { try { ms.setActionHandler(action, fn); } catch { /* trình duyệt không hỗ trợ nút này */ } };
+  on('play', () => audio.play());
+  on('pause', () => audio.pause());
+  on('stop', () => { audio.pause(); audio.currentTime = 0; });
+  on('nexttrack', () => step(1));
+  on('previoustrack', () => step(-1));
+  on('seekto', e => { if (e.fastSeek && 'fastSeek' in audio) audio.fastSeek(e.seekTime); else audio.currentTime = e.seekTime; updatePositionState(); });
+  on('seekbackward', e => { audio.currentTime = Math.max(0, audio.currentTime - (e.seekOffset || 10)); updatePositionState(); });
+  on('seekforward', e => { audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + (e.seekOffset || 10)); updatePositionState(); });
+  audio.addEventListener('play', () => { ms.playbackState = 'playing'; updatePositionState(); });
+  audio.addEventListener('pause', () => { ms.playbackState = 'paused'; updatePositionState(); });
+  for (const ev of ['loadedmetadata', 'seeked', 'ratechange']) audio.addEventListener(ev, updatePositionState);
 }
 
 // PWA: chạy offline + nút cài app
