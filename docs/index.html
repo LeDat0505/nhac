@@ -805,6 +805,9 @@ let tracks = [], folders = [];
 let queue = [], queueBase = [], queueCtx = '';
 let curId = null, curUrl = null;
 let view = { type: 'home' };
+// Android mà không chạy bằng Chrome thật (trình duyệt Mi, trình duyệt nhúng trong Zalo/Messenger/Facebook...) → không nghe nền được
+const needChrome = /Android/i.test(navigator.userAgent) && (!('Notification' in window)
+  || /; wv\)|MiuiBrowser|XiaoMi\/|FBAN|FBAV|Instagram|Zalo|Line\/|UCBrowser|HeyTapBrowser/i.test(navigator.userAgent));
 const settings = Object.assign({ shuffle: false, repeat: 'off', volume: 0.8, muted: false, bg: 'bg-obsidian', tint: 75, blur: 18, libWide: false, bgFromCover: false, autoLyrics: true, autoArt: true, autoDiscover: true, autoplay: true, fade: 0 },
                                JSON.parse(localStorage.getItem('mm-settings') || '{}'));
 const saveSettings = () => localStorage.setItem('mm-settings', JSON.stringify(settings));
@@ -1592,6 +1595,16 @@ function renderMain() {
   let html = `<div class="pills"><div>${pills.map(([k, l]) => `<button class="pill ${active === k ? 'on' : ''}" data-view="${k}">${l}</button>`).join('')}</div>
     <button class="pill np-toggle" data-np>${icon('panel', 'xs')}&nbsp;Đang phát</button></div>`;
 
+  // Android nhưng không chạy bằng Chrome (trình duyệt Mi, trình duyệt trong Zalo/Messenger...) → nhạc tắt khi thoát app, không có thanh điều khiển
+  if (needChrome && !sessionStorage.getItem('hideChrome')) {
+    html += `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;margin-bottom:18px;border-radius:14px;
+               background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.45)">
+      ${icon('note', 'lg')}<div style="flex:1;min-width:180px"><b>Nên mở bằng Chrome</b><div class="t2" style="white-space:normal">
+      Trình duyệt này tắt nhạc khi bạn thoát app và không có thanh điều khiển. Mở bằng Chrome, rồi bấm ⋮ → Thêm vào màn hình chính để thay icon cũ.</div></div>
+      <button class="soft-btn solid primary" data-act="openchrome" style="flex:0 0 auto">Mở bằng Chrome</button>
+      <button class="soft-btn solid" data-act="hidechrome" style="flex:0 0 auto">Để sau</button></div>`;
+  }
+
   // Chưa đăng nhập thư viện chung (hoặc hết phiên) → dải nhắc nổi bật
   if (cloud.available && !$('reloginBtn').classList.contains('hidden')) {
     html += `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;margin-bottom:18px;border-radius:14px;
@@ -2109,6 +2122,8 @@ document.addEventListener('click', async e => {
     case 'add': return $('fileIn').click();
     case 'cloudup': return $('cloudIn').click();
     case 'login': return $('reloginBtn').click();
+    case 'openchrome': location.href = `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;end`; return;
+    case 'hidechrome': sessionStorage.setItem('hideChrome', '1'); return renderMain();
     case 'logout': return cloudLogout();
   }
 });
@@ -2265,7 +2280,7 @@ if ('mediaSession' in navigator) {
 }
 
 // Chẩn đoán thanh điều khiển trên thông báo: ghi lại sự kiện phát nhạc + trạng thái, để chụp màn hình gửi lại
-window.APP_VER = 'v20';   // nhớ tăng cùng VERSION trong sw.js
+window.APP_VER = 'v21';   // nhớ tăng cùng VERSION trong sw.js
 const diagLog = [];
 const dlog = m => { diagLog.push(new Date().toTimeString().slice(0, 8) + ' ' + m); if (diagLog.length > 40) diagLog.shift(); if (!$('diagOut').classList.contains('hidden')) renderDiag(); };
 for (const ev of ['play', 'playing', 'pause', 'ended', 'stalled', 'waiting', 'error', 'emptied', 'loadedmetadata'])
