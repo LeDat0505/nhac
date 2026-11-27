@@ -261,7 +261,15 @@
   .lyrics p { margin: 0; padding: 5px 4px; border-radius: 8px; font-size: 15px; font-weight: 600; line-height: 1.4; color: rgba(233, 213, 255, .42);
               transition: color .25s, transform .25s; transform-origin: left center; }
   .lyrics.synced p { cursor: pointer; } .lyrics.synced p:hover { background: rgba(107, 33, 168, .35); }
-  .lyrics p.cur { color: #fff; transform: scale(1.04); text-shadow: 0 0 18px rgba(232, 121, 249, .6); }
+  .lyrics p.cur { color: rgba(255, 255, 255, .38); transform: scale(1.04); }
+  /* Karaoke: từ đã hát sáng lên, từ đang hát tô dần từ trái sang phải */
+  .lyrics .w { transition: color .15s, text-shadow .3s; }
+  .lyrics p.cur .w.on { color: #fff; text-shadow: 0 0 10px rgba(240, 171, 252, .9), 0 0 22px rgba(217, 70, 239, .55); }
+  .lyrics p.cur .w.part { color: transparent; -webkit-background-clip: text; background-clip: text;
+    background-image: linear-gradient(90deg, #fff calc(var(--p) - 4%), #f5d0fe var(--p), rgba(255, 255, 255, .38) calc(var(--p) + 4%));
+    filter: drop-shadow(0 0 6px rgba(232, 121, 249, .7)); }
+  .lyrics:not(.synced) p.cur .w { color: inherit; }
+  @media (prefers-reduced-motion: reduce) { .lyrics p.cur .w.part { color: #fff; background: none; } }
   .lyrics p.done { color: rgba(233, 213, 255, .65); }
   .lyrics:not(.synced) p { color: rgba(243, 232, 255, .85); font-weight: 500; }
   .lyrics p.lyr-msg { color: var(--muted); font-weight: 500; font-size: 13px; cursor: default; }
@@ -1155,8 +1163,22 @@ function parseLrc(text) {
     const off = /^\s*\[offset:\s*([+-]?\d+)\s*\]/i.exec(raw);
     if (off) { offset = +off[1] / 1000; continue; }
     const stamps = [...raw.matchAll(/\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g)];
-    const words = raw.replace(/\[[^\]]*\]/g, '').trim();
-    if (stamps.length) for (const m of stamps) timed.push({ t: Math.max(0, +m[1] * 60 + +m[2] + (m[3] ? parseFloat('0.' + m[3]) : 0) - offset), text: words });
+    const body = raw.replace(/\[[^\]]*\]/g, '');
+    const words = body.replace(/<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>/g, '').replace(/\s+/g, ' ').trim();
+    const toSec = m => +m[1] * 60 + +m[2] + (m[3] ? parseFloat('0.' + m[3]) : 0);
+    // LRC nâng cao: "<00:12.50>từ" → mốc giờ của từng từ (lưu tương đối so với đầu dòng)
+    const wt = [...body.matchAll(/<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>([^<]*)/g)];
+    if (stamps.length) for (const m of stamps) {
+      const t0 = toSec(m), line = { t: Math.max(0, t0 - offset), text: words };
+      if (wt.length) {
+        const ws = [], head = body.slice(0, body.indexOf('<')).trim();
+        if (head) for (const part of head.split(/\s+/)) ws.push({ text: part, t: 0 });
+        for (const w of wt) for (const part of w[4].split(/\s+/).filter(Boolean)) ws.push({ text: part, t: toSec(w) - toSec(stamps[0]) });
+        const tail = wt[wt.length - 1]; if (!tail[4].trim()) line.end = toSec(tail) - toSec(stamps[0]);   // mốc cuối = hết dòng
+        if (ws.length) line.words = ws;
+      }
+      timed.push(line);
+    }
     else if (!/^\s*\[[a-z]+:.*\]\s*$/i.test(raw)) plain.push({ t: null, text: words });   // bỏ thẻ [ar:], [ti:]...
   }
   if (timed.length) return { synced: true, lines: timed.sort((a, b) => a.t - b.t) };
@@ -1219,7 +1241,7 @@ async function loadLyrics() {
   }
   lyr.data = parseLrc(res.lrc);
   box.classList.toggle('synced', lyr.data.synced);
-  box.innerHTML = lyr.data.lines.map((l, i) => `<p data-i="${i}" class="${l.text ? '' : 'gap'}">${esc(l.text) || '♪'}</p>`).join('');
+  box.innerHTML = lyr.data.lines.map((l, i) => `<p data-i="${i}" class="${l.text ? '' : 'gap'}">${l.text ? lineWords(l).map(w => `<span class="w">${esc(w.text)}</span>`).join(' ') : '♪'}</p>`).join('');
   box.scrollTop = 0;
   $('lyrSrc').textContent = (SRC_LABEL[res.src] || '') + (lyr.data.synced ? '' : ' • lời không có mốc thời gian');
   syncLyrics(true);
@@ -1237,8 +1259,42 @@ function syncLyrics(force) {
   const el = box.querySelector(`p[data-i="${i}"]`);
   if (!el) return;
   el.classList.add('cur');
+  lyr.words = [...el.querySelectorAll('.w')];
   if (Date.now() - lyr.userScroll > 3000) box.scrollTop = el.offsetTop - box.clientHeight / 2 + el.clientHeight / 2;   // không giật khi người dùng đang tự cuộn
+  karaoke();
 }
+function lineWords(l) { return l.words || l.text.split(' ').filter(Boolean).map(text => ({ text })); }
+// Mốc bắt đầu/kết thúc của từng từ trong dòng (tính 1 lần / dòng).
+// Có mốc từng từ (LRC nâng cao) thì dùng; không thì chia theo số chữ, giả sử dòng hát trong khoảng tới dòng sau
+function wordTimes(i) {
+  const L = lyr.data.lines, l = L[i];
+  if (l._wt) return l._wt;
+  const ws = lineWords(l), gap = (L[i + 1] ? L[i + 1].t : (audio.duration || l.t + 6)) - l.t;
+  let out;
+  if (l.words) {
+    const end = Math.min(gap, l.end ?? gap);
+    out = ws.map((w, k) => ({ s: w.t, e: k + 1 < ws.length ? ws[k + 1].t : Math.max(w.t + 0.3, end) }));
+  } else {
+    const chars = ws.reduce((n, w) => n + w.text.length + 1, 0) || 1;
+    const dur = Math.max(0.6, Math.min(gap * 0.9, chars * 0.075 + 0.8));   // ~13 chữ/giây, không quá 90% khoảng trống
+    let acc = 0;
+    out = ws.map(w => { const s = acc / chars * dur; acc += w.text.length + 1; return { s, e: acc / chars * dur }; });
+  }
+  return (l._wt = out);
+}
+function karaoke() {
+  if (!lyr.data?.synced || lyr.idx < 0 || !lyr.words?.length) return;
+  const now = audio.currentTime + 0.15 - lyr.data.lines[lyr.idx].t, T = wordTimes(lyr.idx);
+  lyr.words.forEach((w, k) => {
+    const x = T[k]; if (!x) return;
+    const p = now >= x.e ? 1 : now <= x.s ? 0 : (now - x.s) / (x.e - x.s);
+    w.classList.toggle('on', p >= 1);
+    w.classList.toggle('part', p > 0 && p < 1);
+    if (p > 0 && p < 1) w.style.setProperty('--p', (p * 100).toFixed(1) + '%');
+  });
+}
+// Chạy mượt 60 khung/giây khi đang phát và đang nhìn thấy (ẩn app thì trình duyệt tự dừng, không tốn pin)
+(function karaokeLoop() { if (!audio.paused && !document.hidden) karaoke(); requestAnimationFrame(karaokeLoop); })();
 
 // =====================================================================
 //  ẢNH BÌA TỰ TÌM (iTunes Search) cho bài thiếu bìa
