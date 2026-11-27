@@ -557,6 +557,8 @@
     <button class="soft-btn solid" id="diagBtn" title="Xem vì sao thanh điều khiển trên thông báo không hiện">Kiểm tra thông báo</button>
   </div>
   <pre id="diagOut" class="diag hidden"></pre>
+  <div style="display:flex;align-items:center;gap:10px;margin:0 0 14px"><span class="hint" id="verLine" style="margin:0;flex:1"></span>
+    <button class="soft-btn solid" id="updBtn">Kiểm tra cập nhật</button></div>
   <div class="slide-row">
     <div><div class="top"><span>Độ phủ tím</span><b id="tintVal">75%</b></div><input id="tint" class="slider" type="range" min="35" max="95" value="75"></div>
     <div><div class="top"><span>Độ mờ kính các khung</span><b id="blurVal">18px</b></div><input id="blur" class="slider" type="range" min="0" max="32" value="18"></div>
@@ -608,6 +610,24 @@
     <li>Mở app từ icon chữ <b>N</b> tím và <b>đăng nhập lại bằng mã mời</b> một lần.</li>
   </ol>
   <p class="hint" style="margin-top:10px">Nút ☁↑ để tải nhạc lên chỉ hiện sau khi đăng nhập.</p>
+</dialog>
+
+<dialog id="andDlg">
+  <div class="dlg-head">
+    <div><div class="dlg-icon"><svg class="i"><use href="#i-download"/></svg></div>
+      <div><h3>Thêm app vào màn hình chính</h3><p>Dùng Chrome trên Android</p></div></div>
+    <button class="icon-btn" data-close><svg class="i"><use href="#i-x"/></svg></button>
+  </div>
+  <div id="andChrome" class="hidden" style="margin-bottom:12px">
+    <p class="hint" style="margin-bottom:8px">Bạn đang mở bằng trình duyệt khác. Cần mở bằng <b>Chrome</b> trước:</p>
+    <button class="soft-btn solid primary" data-act="openchrome">Mở bằng Chrome</button></div>
+  <ol style="margin:0 0 6px;padding-left:20px;line-height:1.9">
+    <li>Trong Chrome, bấm <b>⋮</b> (góc trên bên phải).</li>
+    <li>Chọn <b>Thêm vào màn hình chính</b>.</li>
+    <li>Nếu có lựa chọn, bấm <b>Tạo lối tắt</b>: icon hiện <b>ngay</b>, không phải chờ tải.</li>
+    <li>Mở app từ icon chữ <b>N</b> tím và đăng nhập bằng mã mời một lần.</li>
+  </ol>
+  <p class="hint" style="margin-top:10px"><b>Máy Xiaomi/POCO/Redmi:</b> nếu tải xong mà không thấy icon, vào <b>Cài đặt → Ứng dụng → Chrome → Quyền ứng dụng khác</b>, bật <b>Lối tắt trên màn hình chính</b>. Icon cũng có thể nằm trong ngăn kéo ứng dụng (vuốt lên ở màn hình chính).</p>
 </dialog>
 
 <div class="drop" id="drop">Thả nhạc vào đây</div>
@@ -2280,7 +2300,7 @@ if ('mediaSession' in navigator) {
 }
 
 // Chẩn đoán thanh điều khiển trên thông báo: ghi lại sự kiện phát nhạc + trạng thái, để chụp màn hình gửi lại
-window.APP_VER = 'v21';   // nhớ tăng cùng VERSION trong sw.js
+window.APP_VER = 'v22';   // nhớ tăng cùng VERSION trong sw.js
 const diagLog = [];
 const dlog = m => { diagLog.push(new Date().toTimeString().slice(0, 8) + ' ' + m); if (diagLog.length > 40) diagLog.shift(); if (!$('diagOut').classList.contains('hidden')) renderDiag(); };
 for (const ev of ['play', 'playing', 'pause', 'ended', 'stalled', 'waiting', 'error', 'emptied', 'loadedmetadata'])
@@ -2305,6 +2325,29 @@ function renderDiag() {
 $('diagBtn').onclick = () => { $('diagOut').classList.toggle('hidden'); renderDiag(); };
 setInterval(() => { if (!$('diagOut').classList.contains('hidden') && !document.hidden) renderDiag(); }, 1000);
 
+// Tự cập nhật: so phiên bản đang chạy với bản trên máy chủ, khác thì tải lại (không ngắt khi đang nghe nhạc)
+let lastUpd = 0;
+async function checkUpdate(manual) {
+  $('verLine').textContent = 'Phiên bản ' + APP_VER;
+  if (!navigator.onLine || location.protocol === 'file:') { if (manual) toast('Đang offline, chưa kiểm tra được.'); return; }
+  lastUpd = Date.now();
+  try {
+    const txt = await (await fetch('sw.js', { cache: 'no-store' })).text();
+    const v = /VERSION = '([^']+)'/.exec(txt)?.[1];
+    if (!v || v === APP_VER) { if (manual) toast('Bạn đang dùng bản mới nhất (' + APP_VER + ').'); return; }
+    if (!manual && (!audio.paused || sessionStorage.getItem('upd') === v)) return;   // đang nghe → để lần sau; đã thử bản này → khỏi lặp
+    sessionStorage.setItem('upd', v);
+    toast('Có bản mới ' + v + ', đang cập nhật…');
+    const reg = await navigator.serviceWorker?.getRegistration(); await reg?.update().catch(() => {});
+    for (const k of await caches.keys()) await caches.delete(k);
+    await fetch('./', { cache: 'reload' }).catch(() => {});
+    setTimeout(() => location.reload(), 800);
+  } catch { if (manual) toast('Không kiểm tra được cập nhật lúc này.'); }
+}
+$('updBtn').onclick = () => checkUpdate(true);
+setTimeout(() => checkUpdate(false), 4000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - lastUpd > 10 * 60e3) checkUpdate(false); });
+
 // PWA: chạy offline + nút cài app
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js');
 let installPrompt;
@@ -2312,11 +2355,14 @@ addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt
 // iPhone/iPad: Safari không có nút cài tự động → hiện nút "Cài app" kèm hướng dẫn
 const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isStandalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-if (isIOS && !isStandalone) $('installBtn').classList.remove('hidden');
+const isAndroid = /Android/i.test(navigator.userAgent);
+if ((isIOS || isAndroid) && !isStandalone) $('installBtn').classList.remove('hidden');
 $('installBtn').onclick = async () => {
   if (isIOS && !installPrompt) { $('iosDlg').showModal(); return; }
+  if (isAndroid && (!installPrompt || needChrome)) { $('andChrome').classList.toggle('hidden', !needChrome); $('andDlg').showModal(); return; }
   if (!installPrompt) return;
-  installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; $('installBtn').classList.add('hidden');
+  installPrompt.prompt(); const ch = await installPrompt.userChoice; installPrompt = null;
+  if (ch?.outcome === 'accepted' && isAndroid) toast('Đang cài… Nếu xong mà không thấy icon, tìm "Nhạc" trong ngăn kéo ứng dụng (vuốt lên ở màn hình chính).');
 };
 addEventListener('appinstalled', () => $('installBtn').classList.add('hidden'));
 if (!window.showDirectoryPicker) $('linkBtn').classList.add('hidden');
