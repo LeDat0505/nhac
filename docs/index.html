@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Nhạc của tôi</title>
+<title>Vinyl</title>
+<meta name="apple-mobile-web-app-title" content="Vinyl">
+<meta name="application-name" content="Vinyl">
 <script>
   // Mở bằng ".../nhac" (thiếu dấu /) thì chuyển sang ".../nhac/" để các file đi kèm tải đúng chỗ
   if (!location.pathname.endsWith('/') && !/\.[a-z0-9]+$/i.test(location.pathname))
@@ -417,7 +419,7 @@
 
 <!-- 1. THANH TRÊN CÙNG -->
 <header>
-  <div class="brand"><img src="icon-192.png" alt=""><span>Nhạc của tôi</span></div>
+  <div class="brand"><img src="icon-192.png" alt=""><span>Vinyl</span></div>
   <div class="hdr-center">
     <button class="round" id="homeBtn" title="Trang chủ"><svg class="i"><use href="#i-home"/></svg></button>
     <div class="search">
@@ -1802,7 +1804,7 @@ function renderNow() {
   $('npCount').textContent = queue.length ? `${Math.max(queue.length - i - 1, 0)} bài còn lại` : '';
   $('upNext').innerHTML = next.length ? next.map(n => `<button data-jump="${n.id}">${coverHTML(artUrl(n), n.album || n.title)}<div style="min-width:0"><div class="t1">${esc(n.title)}</div><div class="t2">${esc(n.artist)}</div></div></button>`).join('')
                                       : `<div class="none">${!t ? 'Danh sách chờ đang trống.' : settings.autoplay ? 'Hết danh sách: sẽ tự phát tiếp bài hợp gu của bạn.' : 'Hết danh sách. Bật lặp lại hoặc Tự phát tiếp để nghe tiếp.'}</div>`;
-  document.title = t ? `${t.title} • ${t.artist}` : 'Nhạc của tôi';
+  document.title = t ? `${t.title} • ${t.artist}` : 'Vinyl';
   if ('mediaSession' in navigator && t) updateMediaSession(t, art);
   if (settings.bgFromCover) applyBg();
   loadLyrics();
@@ -2270,11 +2272,11 @@ async function artForSession(t, art) {
 async function updateMediaSession(t, art) {
   // hiện tên bài ngay (tạm dùng icon app), rồi thay ảnh bìa khi đã xử lý xong
   if (art && art.startsWith('blob:') && !msArt.has(t.id))
-    navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist, album: t.album || 'Nhạc của tôi',
+    navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist, album: t.album || 'Vinyl',
       artwork: [{ src: new URL('icon-512.png', location.href).href, sizes: '512x512', type: 'image/png' }] });
   const artwork = await artForSession(t, art);
   if (t.id !== curId) return;   // đã chuyển bài trong lúc xử lý ảnh
-  navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist, album: t.album || 'Nhạc của tôi', artwork });
+  navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist, album: t.album || 'Vinyl', artwork });
 }
 // Thanh thời gian trên thông báo (để tua được như Spotify)
 function updatePositionState() {
@@ -2300,7 +2302,7 @@ if ('mediaSession' in navigator) {
 }
 
 // Chẩn đoán thanh điều khiển trên thông báo: ghi lại sự kiện phát nhạc + trạng thái, để chụp màn hình gửi lại
-window.APP_VER = 'v22';   // nhớ tăng cùng VERSION trong sw.js
+window.APP_VER = 'v23';   // nhớ tăng cùng VERSION trong sw.js
 const diagLog = [];
 const dlog = m => { diagLog.push(new Date().toTimeString().slice(0, 8) + ' ' + m); if (diagLog.length > 40) diagLog.shift(); if (!$('diagOut').classList.contains('hidden')) renderDiag(); };
 for (const ev of ['play', 'playing', 'pause', 'ended', 'stalled', 'waiting', 'error', 'emptied', 'loadedmetadata'])
@@ -2362,7 +2364,7 @@ $('installBtn').onclick = async () => {
   if (isAndroid && (!installPrompt || needChrome)) { $('andChrome').classList.toggle('hidden', !needChrome); $('andDlg').showModal(); return; }
   if (!installPrompt) return;
   installPrompt.prompt(); const ch = await installPrompt.userChoice; installPrompt = null;
-  if (ch?.outcome === 'accepted' && isAndroid) toast('Đang cài… Nếu xong mà không thấy icon, tìm "Nhạc" trong ngăn kéo ứng dụng (vuốt lên ở màn hình chính).');
+  if (ch?.outcome === 'accepted' && isAndroid) toast('Đang cài… Nếu xong mà không thấy icon, tìm "Vinyl" trong ngăn kéo ứng dụng (vuốt lên ở màn hình chính).');
 };
 addEventListener('appinstalled', () => $('installBtn').classList.add('hidden'));
 if (!window.showDirectoryPicker) $('linkBtn').classList.add('hidden');

@@ -1,4 +1,4 @@
-// Worker cho "Nhạc của tôi": phục vụ app + API thư viện nhạc chung.
+// Worker cho "Vinyl": phục vụ app + API thư viện nhạc chung.
 //
 //   • File nhạc & ảnh bìa: Backblaze B2 (bucket riêng tư, gọi qua API tương thích S3)
 //   • Mục lục thư viện:     Cloudflare KV (mỗi bài một khóa "song:<id>", thông tin nằm ở metadata)

@@ -1,7 +1,7 @@
 {
-  "name": "Nhạc của tôi",
-  "short_name": "Nhạc",
-  "description": "App nghe nhạc riêng, không quảng cáo, chạy offline.",
+  "name": "Vinyl",
+  "short_name": "Vinyl",
+  "description": "Vinyl: app nghe nhạc riêng, không quảng cáo, chạy offline.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
