@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
@@ -2329,6 +2329,14 @@ function autoplayTracks() {
   const out = [], used = new Set();
   for (let i = 0; out.length < 10 && i < 12; i++)
     for (const g of groups) { const t = g[i]; if (ok(t) && !used.has(t.id) && out.length < 10) { used.add(t.id); out.push(t); } }
+  // Thư viện ít bài: không đủ bài "chưa nghe gần đây" → nới dần điều kiện thay vì dừng nhạc
+  const pool = live().filter(t => t.id !== curId && !used.has(t.id) && S(t.id).s < 3 + S(t.id).p);   // bỏ bài hay bị bỏ qua
+  const lastHeard = id => { const k = queue.lastIndexOf(id); return k < 0 ? -1 : k; };
+  const fill = list => { for (const t of list) { if (out.length >= 10) break; if (!used.has(t.id)) { used.add(t.id); out.push(t); } } };
+  if (out.length < 10) fill(pool.filter(t => !recent.has(t.id)).sort(() => Math.random() - 0.5));   // chưa có trong danh sách vừa nghe
+  if (out.length < 10) fill(pool.sort((a, b) => lastHeard(a.id) - lastHeard(b.id)));               // bài nghe lâu nhất trước
+  if (!out.length) fill(live().filter(t => t.id !== curId).sort(() => Math.random() - 0.5));       // kể cả bài hay bị bỏ qua
+  if (!out.length && cur) out.push(cur);                                                           // cả thư viện chỉ có 1 bài → phát lại
   return out;
 }
 function step(dir, auto) {
@@ -2342,7 +2350,10 @@ function step(dir, auto) {
       const more = autoplayTracks();
       if (more.length) {
         const ids = more.map(t => t.id);
-        queue.push(...ids); queueBase.push(...ids); queueCtx = 'Tự phát tiếp • theo gu của bạn';
+        // Bỏ các bài trùng trong phần đã nghe, để mỗi bài chỉ xuất hiện một lần (tránh nhảy vòng về bài cũ)
+        const hist = queue.slice(0, i - 1).filter(id => id !== curId && !ids.includes(id));
+        queue = [...hist, curId, ...ids]; queueBase = queue.slice(); i = hist.length + 1;
+        queueCtx = 'Tự phát tiếp • theo gu của bạn';
         if (auto) toast('Hết danh sách, tự phát tiếp bài hợp gu của bạn');
       } else if (auto) { audio.pause(); return; } else i = 0;
     } else if (!auto) i = 0;
@@ -2644,7 +2655,7 @@ if ('mediaSession' in navigator) {
 }
 
 // Chẩn đoán thanh điều khiển trên thông báo: ghi lại sự kiện phát nhạc + trạng thái, để chụp màn hình gửi lại
-window.APP_VER = 'v24';   // nhớ tăng cùng VERSION trong sw.js
+window.APP_VER = 'v25';   // nhớ tăng cùng VERSION trong sw.js
 const diagLog = [];
 const dlog = m => { diagLog.push(new Date().toTimeString().slice(0, 8) + ' ' + m); if (diagLog.length > 40) diagLog.shift(); if (!$('diagOut').classList.contains('hidden')) renderDiag(); };
 for (const ev of ['play', 'playing', 'pause', 'ended', 'stalled', 'waiting', 'error', 'emptied', 'loadedmetadata'])
