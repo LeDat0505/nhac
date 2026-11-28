@@ -164,6 +164,39 @@
   .row:hover .like, .row:hover .del, .row .like.on { opacity: 1; }
   .like.on { color: var(--fuchsia) !important; } .like.on svg { fill: currentColor; }
   .row .like:hover { color: #fff; } .row .del:hover { color: #fb7185; }
+  .row .more { color: var(--muted); display: grid; place-items: center; height: 30px; border-radius: 8px; opacity: 0; transition: .15s; }
+  .row:hover .more { opacity: 1; } .row .more:hover { color: #fff; background: rgba(107, 33, 168, .45); }
+  /* Menu ⋮ (máy tính: nổi cạnh nút; điện thoại: trượt từ dưới lên) */
+  #popMenu { position: fixed; z-index: 200; min-width: 230px; max-width: min(320px, 92vw); max-height: 70vh; overflow-y: auto; padding: 6px;
+             background: #1c0d36; border: 1px solid rgba(192, 132, 252, .35); border-radius: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, .6); }
+  #popMenu.hidden { display: none; }
+  #popMenu .m-head { padding: 8px 10px 10px; display: flex; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  #popMenu .m-head .cover { width: 40px; height: 40px; border-radius: 6px; }
+  #popMenu button { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 9px; text-align: left; font-size: 14px; }
+  #popMenu button:hover, #popMenu button:focus-visible { background: rgba(107, 33, 168, .5); outline: none; }
+  #popMenu button.danger { color: #fda4af; }
+  #popMenu button .chev { margin-left: auto; opacity: .6; }
+  #popMenu .m-sep { height: 1px; background: var(--line); margin: 4px 6px; }
+  #menuShade { position: fixed; inset: 0; z-index: 199; background: rgba(0, 0, 0, .5); }
+  @media (max-width: 760px) {
+    #popMenu { left: 0 !important; right: 0; top: auto !important; bottom: 0; max-width: none; border-radius: 20px 20px 0 0;
+               padding: 8px 8px calc(12px + env(safe-area-inset-bottom)); max-height: 80vh; }
+    #popMenu button { padding: 13px 12px; font-size: 15px; }
+  }
+  /* Hàng chờ: kéo để sắp xếp, ✕ để bỏ */
+  .q-item { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 8px; touch-action: pan-y; }
+  .q-item:hover { background: rgba(107, 33, 168, .45); }
+  .q-item.dragging { background: rgba(192, 38, 211, .35); box-shadow: 0 6px 18px rgba(0, 0, 0, .5); position: relative; z-index: 2; }
+  .q-item .jump { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left; }
+  .q-item .grip { cursor: grab; color: var(--muted); padding: 6px 2px; touch-action: none; display: grid; place-items: center; }
+  .q-item .qx { color: var(--muted); padding: 6px; border-radius: 6px; display: grid; place-items: center; }
+  .q-item .qx:hover { color: #fb7185; }
+  .q-item .mine { font-size: 9px; font-weight: 800; color: #f0abfc; border: 1px solid rgba(240, 171, 252, .4); border-radius: 99px; padding: 0 5px; margin-left: 4px; }
+  .q-clear { font-size: 11px; color: var(--muted); text-decoration: underline; }
+  .sleep-on { color: #f0abfc !important; }
+  .np-top .tools { display: flex; gap: 8px; align-items: center; }
+  .sleep-badge { font-size: 11px; font-weight: 700; margin-left: 4px; }
+  .pl-cover { background-image: linear-gradient(135deg, #7e22ce, #db2777); }
   .eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 15px; }
   .eq b { width: 3px; border-radius: 9px; background: #e879f9; animation: eq .8s ease-in-out infinite alternate; }
   .eq b:nth-child(1) { height: 8px; animation-delay: .1s; } .eq b:nth-child(2) { height: 15px; animation-delay: .3s; } .eq b:nth-child(3) { height: 10px; animation-delay: .2s; }
@@ -209,7 +242,7 @@
   .np-card { margin-top: 16px; padding: 12px; border-radius: 12px; background: rgba(46, 16, 101, .6); backdrop-filter: blur(10px);
              border: 1px solid rgba(192, 132, 252, .2); }
   .np-card .hd { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: #f0abfc; margin-bottom: 8px; letter-spacing: .04em; }
-  .up-next { display: flex; flex-direction: column; gap: 2px; max-height: 150px; overflow-y: auto; }
+  .up-next { display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow-y: auto; }
   /* Gợi ý & Khám phá */
   .mix-banner { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 22px; border-radius: 18px;
                 background: linear-gradient(120deg, rgba(126, 34, 206, .55), rgba(192, 38, 211, .35) 60%, rgba(79, 70, 229, .35));
@@ -381,9 +414,9 @@
     .quick { grid-template-columns: 1fr; }
     .mixes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .mix .play-fab { display: none; }
-    .row { grid-template-columns: minmax(0, 1fr) 36px 44px; padding: 6px; gap: 8px; }
-    .row .n, .row .del { display: none; }
-    .row .like { opacity: 1; }
+    .row { grid-template-columns: minmax(0, 1fr) 34px 40px 30px; padding: 6px; gap: 6px; }
+    .row .n { display: none; }
+    .row .like, .row .more { opacity: 1; }
     .hero { flex-direction: column; align-items: flex-start; }
     .hero .cover { width: 140px; height: 140px; }
     #np { inset: 0; top: 0; bottom: 0; right: 0; width: 100%; border-radius: 0; border: 0; z-index: 50; transform: translateY(100%); }
@@ -461,7 +494,9 @@
     <div class="np-shade"></div>
     <div class="np-top">
       <span id="npCtx">Chưa phát bài nào</span>
-      <button class="dark-btn" id="npClose" title="Đóng"><svg class="i sm"><use href="#i-x"/></svg></button>
+      <div class="tools">
+        <button class="dark-btn" id="sleepBtn2" data-sleep title="Hẹn giờ tắt nhạc"><svg class="i sm"><use href="#i-moon"/></svg><span class="sleep-badge"></span></button>
+        <button class="dark-btn" id="npClose" title="Đóng"><svg class="i sm"><use href="#i-x"/></svg></button></div>
     </div>
     <div class="np-body">
       <div class="vinyl-wrap" id="vinylWrap" aria-hidden="true">
@@ -472,7 +507,9 @@
       </div>
       <div class="np-title">
         <div style="min-width:0"><h2 id="npTitle">Chọn một bài để bắt đầu</h2><p id="npArtist" class="t1"></p></div>
-        <button class="circle-btn" id="npLike" title="Thêm vào Bài hát đã thích"><svg class="i sm"><use href="#i-heart"/></svg></button>
+        <div style="display:flex;gap:8px">
+          <button class="circle-btn" id="npMore" title="Thêm vào playlist, hàng chờ…"><svg class="i sm"><use href="#i-more"/></svg></button>
+          <button class="circle-btn" id="npLike" title="Thêm vào Bài hát đã thích"><svg class="i sm"><use href="#i-heart"/></svg></button></div>
       </div>
       <div class="np-mobile-ctrls">
         <div class="seek"><span id="cur2">0:00</span><input id="seek2" class="slider" type="range" min="0" max="1000" value="0"><span id="tot2">0:00</span></div>
@@ -491,7 +528,7 @@
         <div class="lyr-src" id="lyrSrc"></div>
       </div>
       <div class="np-card">
-        <div class="hd"><span>TIẾP THEO</span><span id="npCount"></span></div>
+        <div class="hd"><span>TIẾP THEO</span><span><span id="npCount"></span> <button class="q-clear hidden" id="qClear">Xóa hàng chờ</button></span></div>
         <div class="up-next" id="upNext"></div>
       </div>
     </div>
@@ -517,6 +554,7 @@
     <div class="seek"><span id="cur">0:00</span><input id="seek" class="slider" type="range" min="0" max="1000" value="0"><span id="tot">0:00</span></div>
   </div>
   <div class="p-right">
+    <button id="sleepBtn" data-sleep title="Hẹn giờ tắt nhạc"><svg class="i sm"><use href="#i-moon"/></svg><span class="sleep-badge"></span></button>
     <button id="lyricsBtn" title="Lời bài hát"><svg class="i sm"><use href="#i-mic"/></svg></button>
     <button id="queueBtn" title="Khung Đang phát"><svg class="i sm"><use href="#i-queue"/></svg></button>
     <button id="muteBtn" title="Tắt / bật tiếng (M)"><svg class="i sm"><use href="#i-vol"/></svg></button>
@@ -614,6 +652,25 @@
   <p class="hint" style="margin-top:10px">Nút ☁↑ để tải nhạc lên chỉ hiện sau khi đăng nhập.</p>
 </dialog>
 
+<dialog id="plDlg">
+  <div class="dlg-head">
+    <div><div class="dlg-icon"><svg class="i"><use href="#i-listplus"/></svg></div>
+      <div><h3 id="plDlgTitle">Tạo playlist</h3><p id="plDlgSub">Đặt tên cho danh sách nhạc của bạn</p></div></div>
+    <button class="icon-btn" data-close><svg class="i"><use href="#i-x"/></svg></button>
+  </div>
+  <form method="dialog" id="plForm" style="display:grid;gap:12px">
+    <input id="plName" maxlength="80" autocomplete="off" placeholder="Tên playlist, vd. Nhạc chill"
+           style="height:44px;padding:0 14px;border-radius:12px;background:rgba(46,16,101,.6);border:1px solid rgba(192,132,252,.3);outline:none">
+    <label id="plSharedRow" style="display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.5;cursor:pointer">
+      <input type="checkbox" id="plShared" style="margin-top:3px;accent-color:#d946ef">
+      <span><b>Playlist chung</b><br><span class="t2" style="white-space:normal">Cả nhóm cùng thấy và thêm bài. Chỉ chứa bài trong thư viện chung.</span></span></label>
+    <button class="soft-btn solid primary" type="submit" id="plGo">Tạo</button>
+  </form>
+</dialog>
+
+<div id="menuShade" class="hidden"></div>
+<div id="popMenu" class="hidden" role="menu"></div>
+
 <dialog id="andDlg">
   <div class="dlg-head">
     <div><div class="dlg-icon"><svg class="i"><use href="#i-download"/></svg></div>
@@ -647,6 +704,12 @@
   <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 21V9m-5 5 5-5 5 5M5 3h14"/></symbol>
   <symbol id="i-library" viewBox="0 0 24 24"><path d="M5 4v16M10 4v16M15 4.5l4.5 15"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="12" cy="19" r="1.3"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.2A8.5 8.5 0 1 1 9.8 3.5a6.8 6.8 0 0 0 10.7 10.7z"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><path d="M5 9h14M5 15h14"/></symbol>
+  <symbol id="i-listplus" viewBox="0 0 24 24"><path d="M3 6h12M3 12h12M3 18h7M18 13v8M14 17h8"/></symbol>
+  <symbol id="i-next-up" viewBox="0 0 24 24"><path d="M4 6h10M4 12h10M4 18h6M16 9l5 4-5 4z"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></symbol>
   <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></symbol>
   <symbol id="i-note" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
   <symbol id="i-disc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></symbol>
@@ -1086,7 +1149,9 @@ async function loadCloud(initial) {
     if (!cloud.on && !cloud.available) return;   // không có API (vd. bản trên GitHub Pages) → ẩn hẳn thư viện chung
   }
   $('cloudUpBtn').classList.toggle('hidden', !cloud.on);
-  cloudToTracks(); renderAll(); queueArt(live());
+  cloudToTracks();
+  try { await loadPlaylists(); } catch { }
+  renderAll(); queueArt(live());
 }
 async function cloudLogin() {
   const key = $('loginKey').value.trim();
@@ -1108,6 +1173,7 @@ async function cloudLogout() {
   await metaSet('cloudLib', null);
   Object.assign(cloud, { on: false, user: '', owner: false, items: [], totalBytes: 0, cached: new Set() });
   tracks = tracks.filter(t => !t.cloud);
+  PL.shared = []; await metaSet('sharedPl', null);
   $('cloudUpBtn').classList.add('hidden'); needLogin();
   go({ type: 'home' });
 }
@@ -1606,13 +1672,13 @@ preview.onplay = renderDiscState;
 // =====================================================================
 //  GIAO DIỆN: CỘT GIỮA
 // =====================================================================
-const PILLS = [['home', 'Tất cả'], ['songs', 'Bài hát'], ['albums', 'Album'], ['artists', 'Ca sĩ'], ['liked', 'Đã thích']];
+const PILLS = [['home', 'Tất cả'], ['songs', 'Bài hát'], ['playlists', 'Playlist'], ['albums', 'Album'], ['artists', 'Ca sĩ'], ['liked', 'Đã thích']];
 function go(v) { view = v; $('search').value = ''; renderMain(); renderLib(); $('main').scrollTop = 0; }
 
 function renderMain() {
   const main = $('main');
   const q = $('search').value.trim().toLowerCase();
-  const active = q ? '' : ['album', 'artist'].includes(view.type) ? '' : view.type;
+  const active = q ? '' : ['album', 'artist'].includes(view.type) ? '' : view.type === 'playlist' ? 'playlists' : view.type;
   const pills = cloud.on ? [PILLS[0], ['cloud', 'Thư viện chung'], ...PILLS.slice(1)] : PILLS;
   let html = `<div class="pills"><div>${pills.map(([k, l]) => `<button class="pill ${active === k ? 'on' : ''}" data-view="${k}">${l}</button>`).join('')}</div>
     <button class="pill np-toggle" data-np>${icon('panel', 'xs')}&nbsp;Đang phát</button></div>`;
@@ -1690,6 +1756,23 @@ function renderMain() {
     list = liked(); ctx = 'Bài hát đã thích';
     html += heroHTML({ kind: 'Danh sách', name: 'Bài hát đã thích', sub: `${list.length} bài`, likedArt: true });
     html += list.length ? rowsHTML(list) : '<p class="t2">Bấm biểu tượng ♥ ở một bài để thêm vào đây.</p>';
+  } else if (view.type === 'playlists') {
+    const all = allPl();
+    html += `<section><div class="sec-head"><h2 class="sec">Playlist</h2><button class="link" data-plnew>+ Tạo playlist</button></div>
+      <div class="mixes"><button class="mix" data-plnew><div class="art"><div class="cover pl-cover">${icon('plus', 'lg')}</div></div>
+        <div class="t1" style="font-family:var(--display);font-weight:700">Tạo playlist</div><div class="t2">${cloud.on ? 'Riêng hoặc chung cả nhóm' : 'Danh sách nhạc của bạn'}</div></button>
+      ${all.map(plCard).join('')}</div></section>`;
+    if (!all.length) html += `<p class="t2">Chưa có playlist nào. Bấm ⋮ ở một bài rồi chọn “Thêm vào playlist”, hoặc tạo mới ở trên.</p>`;
+  } else if (view.type === 'playlist') {
+    const pl = allPl().find(x => x.id === view.key);
+    if (!pl) return go({ type: 'playlists' });
+    list = plTracks(pl); ctx = 'Playlist • ' + pl.name;
+    html += heroHTML({ kind: pl.shared ? `Playlist chung • tạo bởi ${pl.by || '?'}` : 'Playlist', name: pl.name,
+      sub: `${list.length} bài • ${totalMin(list)} phút${pl.shared && pl.editedBy && pl.editedBy !== pl.by ? ' • ' + pl.editedBy + ' sửa gần nhất' : ''}`,
+      art: firstArt(list), seed: pl.id, ic: 'queue',
+      extra: `<button class="ghost-btn" data-act="plrename">${icon('edit')}Đổi tên</button>`
+           + (!pl.shared || pl.by === cloud.user || cloud.owner ? `<button class="ghost-btn" data-act="pldelete">${icon('x')}Xóa playlist</button>` : '') });
+    html += list.length ? rowsHTML(list) : '<p class="t2">Playlist trống. Bấm ⋮ ở một bài bất kỳ rồi chọn “Thêm vào playlist”.</p>';
   } else if (view.type === 'album') {
     const a = albums().find(x => x.key === view.key);
     if (!a) return go({ type: 'home' });
@@ -1706,6 +1789,13 @@ function renderMain() {
   main.innerHTML = html;
   if (view.type === 'home' && !q) setTimeout(() => loadDiscover(), 0);
   if (list.length) bindRows(main, list, ctx);
+}
+function plCard(p) {
+  const l = plTracks(p);
+  return `<button class="mix" data-open="playlist" data-key="${p.id}"><div class="art">${coverHTML(firstArt(l), p.id, 'queue')}</div>
+    <span class="play-fab" data-playgroup="playlist" data-key="${p.id}">${icon('play', 'sm fill')}</span>
+    <div class="t1" style="font-family:var(--display);font-weight:700">${esc(p.name)}</div>
+    <div class="t2">${p.shared ? 'Chung • ' : ''}${l.length} bài</div></button>`;
 }
 function likedCover(cls = '') { return `<div class="cover ${cls}" style="background-image:linear-gradient(135deg,#4f46e5,#c026d3,#f0abfc)">${icon('heart', 'lg')}</div>`; }
 function quickCard(it) {
@@ -1736,7 +1826,7 @@ function heroHTML(o) {
   const cv = o.likedArt ? likedCover() : coverHTML(o.art, o.seed, o.ic);
   return `<div class="hero ${o.round ? 'artist' : ''}">${cv}<div style="min-width:0"><div class="kind">${o.kind}</div><h1>${esc(o.name)}</h1><div class="t2">${esc(o.sub)}</div></div></div>
     <div class="hero-actions"><button class="big-play" data-act="playall" title="Phát">${icon('play', 'lg fill')}</button>
-    <button class="ghost-btn" data-act="shuffleall">${icon('shuffle')}Phát ngẫu nhiên</button></div>`;
+    <button class="ghost-btn" data-act="shuffleall">${icon('shuffle')}Phát ngẫu nhiên</button>${o.extra || ''}</div>`;
 }
 function rowsHTML(list) {
   return `<div class="rows ${audio.paused ? 'paused' : ''}">${list.map((t, i) => {
@@ -1748,8 +1838,7 @@ function rowsHTML(list) {
       <div class="alb">${esc(t.album)}</div>
       <button class="like ${t.liked ? 'on' : ''}" data-like="${t.id}" title="${t.liked ? 'Bỏ thích' : 'Thích'}">${icon('heart')}</button>
       <div class="dur">${fmt(t.duration)}</div>
-      ${t.cloud && !(cloud.owner || t.by === cloud.user) ? '<span></span>'
-        : `<button class="del" data-del="${t.id}" title="${t.cloud ? 'Xóa khỏi thư viện chung' : t.folderId ? 'Ẩn khỏi app' : 'Xóa khỏi thư viện'}">${icon('x')}</button>`}</div>`;
+      <button class="more" data-more="${t.id}" title="Thêm vào playlist, hàng chờ…">${icon('more')}</button></div>`;
   }).join('')}</div>`;
 }
 function bindRows(root, list, ctx) {
@@ -1764,6 +1853,13 @@ function renderLib() {
   const items = [];
   if (liked().length) items.push(`<button class="lib-item ${view.type === 'liked' ? 'active' : ''}" data-open="liked" title="Bài hát đã thích">${likedCover()}
     <div class="meta"><div class="t1">Bài hát đã thích</div><div class="t2">Danh sách • ${liked().length} bài</div></div></button>`);
+  for (const p of allPl()) {
+    const l = plTracks(p);
+    items.push(`<button class="lib-item ${view.type === 'playlist' && view.key === p.id ? 'active' : ''}" data-open="playlist" data-key="${p.id}" title="${esc(p.name)}">
+      ${coverHTML(firstArt(l), p.id, 'queue')}<div class="meta"><div class="t1">${esc(p.name)}</div><div class="t2">${p.shared ? 'Playlist chung • ' + esc(p.by || '') : 'Playlist'} • ${l.length} bài</div></div></button>`);
+  }
+  items.push(`<button class="lib-item" data-plnew title="Tạo playlist"><div class="cover pl-cover" style="display:grid;place-items:center">${icon('plus')}</div>
+    <div class="meta"><div class="t1">Tạo playlist</div><div class="t2">Riêng hoặc chung</div></div></button>`);
   const al = albums().sort((a, b) => b.added - a.added);
   const groups = al.length ? al.map(a => ({ kind: 'album', a, sub: 'Album • ' + a.artist, ic: 'disc' }))
                            : artists().map(a => ({ kind: 'artist', a, sub: 'Ca sĩ • ' + a.list.length + ' bài', ic: 'user' }));
@@ -1793,22 +1889,258 @@ function renderNow() {
     : 'background-image:radial-gradient(circle,#c026d3,#4c1d95)');
   for (const b of [$('pLike'), $('npLike')]) { b.classList.toggle('on', !!(t && t.liked)); b.disabled = !t; }
   // Tiếp theo
-  const i = queue.indexOf(curId);
-  const next = [];
-  for (let k = 1; k <= 8 && queue.length; k++) {
-    let j = i + k;
-    if (j >= queue.length) { if (settings.repeat !== 'all') break; j %= queue.length; }
-    if (queue[j] === curId) break;
-    const n = tracks.find(x => x.id === queue[j]); if (n) next.push(n);
-  }
-  $('npCount').textContent = queue.length ? `${Math.max(queue.length - i - 1, 0)} bài còn lại` : '';
-  $('upNext').innerHTML = next.length ? next.map(n => `<button data-jump="${n.id}">${coverHTML(artUrl(n), n.album || n.title)}<div style="min-width:0"><div class="t1">${esc(n.title)}</div><div class="t2">${esc(n.artist)}</div></div></button>`).join('')
-                                      : `<div class="none">${!t ? 'Danh sách chờ đang trống.' : settings.autoplay ? 'Hết danh sách: sẽ tự phát tiếp bài hợp gu của bạn.' : 'Hết danh sách. Bật lặp lại hoặc Tự phát tiếp để nghe tiếp.'}</div>`;
+  renderQueue(t);
   document.title = t ? `${t.title} • ${t.artist}` : 'Vinyl';
   if ('mediaSession' in navigator && t) updateMediaSession(t, art);
   if (settings.bgFromCover) applyBg();
   loadLyrics();
 }
+// ---------- Hàng chờ: xem, kéo sắp xếp, bỏ bài ----------
+const Q_SHOW = 40;
+function renderQueue(t = tracks.find(x => x.id === curId)) {
+  const i = queue.indexOf(curId);
+  const up = i < 0 ? [] : queue.slice(i + 1, i + 1 + Q_SHOW);
+  const byId = new Map(tracks.map(x => [x.id, x]));
+  $('npCount').textContent = queue.length && i >= 0 ? `${Math.max(queue.length - i - 1, 0)} bài còn lại` : '';
+  $('qClear').classList.toggle('hidden', !up.length);
+  $('upNext').innerHTML = up.length ? up.map((id, k) => { const n = byId.get(id); if (!n) return '';
+      return `<div class="q-item" data-qi="${i + 1 + k}"><span class="grip" title="Kéo để đổi thứ tự">${icon('grip', 'xs')}</span>
+      <button class="jump" data-jump="${n.id}">${coverHTML(artUrl(n), n.album || n.title)}<div style="min-width:0"><div class="t1">${esc(n.title)}${userQ.has(n.id) ? '<span class="mine">HÀNG CHỜ</span>' : ''}</div><div class="t2">${esc(n.artist)}</div></div></button>
+      <button class="qx" data-qx="${i + 1 + k}" title="Bỏ khỏi hàng chờ">${icon('x', 'xs')}</button></div>`; }).join('')
+    : `<div class="none">${!t ? 'Danh sách chờ đang trống.' : settings.repeat === 'all' && queue.length > 1 ? 'Hết danh sách: phát lại từ đầu.' : settings.autoplay ? 'Hết danh sách: sẽ tự phát tiếp bài hợp gu của bạn.' : 'Hết danh sách. Bật lặp lại hoặc Tự phát tiếp để nghe tiếp.'}</div>`;
+}
+const userQ = new Set();   // bài người dùng tự "Thêm vào hàng chờ" (chưa phát)
+// Bỏ các lần xuất hiện sắp tới của bài (tránh trùng khi chèn lại)
+function dropUpcoming(arr, id, cur) { const c = arr.indexOf(cur); for (let k = arr.length - 1; k > c; k--) if (arr[k] === id) arr.splice(k, 1); }
+function enqueue(ids, mode) {   // mode: 'next' = phát tiếp theo, 'queue' = cuối phần hàng chờ tự thêm
+  ids = ids.filter(id => id !== curId);
+  if (!ids.length) return;
+  if (!curId || !queue.includes(curId)) { const l = ids.map(id => tracks.find(x => x.id === id)).filter(Boolean); return playList(l, null, 'Hàng chờ'); }
+  for (const arr of [queue, queueBase]) {
+    if (!arr.includes(curId)) continue;
+    for (const id of ids) dropUpcoming(arr, id, curId);
+    let pos = arr.indexOf(curId) + 1;
+    if (mode === 'queue') while (pos < arr.length && userQ.has(arr[pos])) pos++;
+    arr.splice(pos, 0, ...ids);
+  }
+  if (mode === 'queue') ids.forEach(id => userQ.add(id));
+  renderQueue();
+  toast(mode === 'next' ? (ids.length > 1 ? `Sẽ phát ${ids.length} bài ngay sau bài này` : 'Sẽ phát ngay sau bài này')
+                        : (ids.length > 1 ? `Đã thêm ${ids.length} bài vào hàng chờ` : 'Đã thêm vào hàng chờ'));
+}
+function removeQueueAt(idx) {
+  const id = queue[idx]; if (!id || id === curId) return;
+  queue.splice(idx, 1); userQ.delete(id);
+  const b = queueBase.indexOf(id, Math.max(0, queueBase.indexOf(curId) + 1)); if (b >= 0) queueBase.splice(b, 1);
+  renderQueue();
+}
+$('qClear').onclick = () => {
+  const i = queue.indexOf(curId); if (i < 0) return;
+  queue = queue.slice(0, i + 1); queueBase = queue.slice(); userQ.clear(); renderQueue(); toast('Đã xóa các bài sắp tới');
+};
+// Kéo thả bằng tay cầm (chuột lẫn cảm ứng)
+$('upNext').addEventListener('pointerdown', e => {
+  const grip = e.target.closest('.grip'); if (!grip) return;
+  const item = grip.closest('.q-item'), box = $('upNext');
+  e.preventDefault(); try { grip.setPointerCapture(e.pointerId); } catch { }
+  item.classList.add('dragging');
+  const move = ev => {
+    const sibs = [...box.querySelectorAll('.q-item:not(.dragging)')];
+    const after = sibs.find(s => { const r = s.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; });
+    after ? box.insertBefore(item, after) : box.appendChild(item);
+    const r = box.getBoundingClientRect();   // tự cuộn khi kéo gần mép
+    if (ev.clientY < r.top + 24) box.scrollTop -= 8; else if (ev.clientY > r.bottom - 24) box.scrollTop += 8;
+  };
+  const up = () => {
+    grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up);
+    item.classList.remove('dragging');
+    const i = queue.indexOf(curId);
+    const order = [...box.querySelectorAll('.q-item')].map(el => queue[+el.dataset.qi]);
+    queue = queue.slice(0, i + 1).concat(order, queue.slice(i + 1 + order.length));
+    const b = queueBase.indexOf(curId);
+    if (!settings.shuffle && b >= 0) queueBase = queue.slice();   // không trộn: thứ tự gốc theo thứ tự mới
+    renderQueue();
+  };
+  grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
+});
+
+// ---------- Playlist (riêng: lưu trong máy • chung: lưu trên máy chủ cho cả nhóm) ----------
+const PL = { mine: [], shared: [] };
+const allPl = () => [...PL.mine, ...PL.shared].sort((a, b) => (b.at || 0) - (a.at || 0));
+function plTracks(p) {
+  const byId = new Map(live().map(t => [t.id, t]));
+  return p.items.map(k => byId.get(p.shared ? 'c:' + k : k)).filter(Boolean);
+}
+async function loadPlaylists() {
+  PL.mine = ((await metaGet('playlists')) || []).map(p => ({ ...p, shared: false }));
+  PL.shared = ((await metaGet('sharedPl')) || []).map(p => ({ ...p, shared: true }));
+  if (cloud.on) {
+    try {
+      const r = await apiFetch('playlists');
+      const local = new Map(PL.shared.filter(p => p._dirty).map(p => [p.id, p]));   // sửa lúc offline chưa gửi được
+      PL.shared = r.items.map(p => local.get(p.id) || { ...p, shared: true });
+      for (const p of local.values()) if (!PL.shared.includes(p)) PL.shared.push(p);
+      await metaSet('sharedPl', PL.shared);
+      for (const p of local.values()) savePl(p, true);
+    } catch { }
+  }
+}
+async function savePl(p, quiet) {
+  if (!p.shared) { p.at = Date.now(); await metaSet('playlists', PL.mine.map(({ shared, ...x }) => x)); }
+  else {
+    p.at = Date.now(); p._dirty = true; await metaSet('sharedPl', PL.shared);
+    try {
+      const r = await apiFetch('playlists/' + p.id, { method: 'PUT', body: JSON.stringify({ name: p.name, items: p.items }), headers: { 'content-type': 'application/json' } });
+      Object.assign(p, r.item, { shared: true }); delete p._dirty; await metaSet('sharedPl', PL.shared);
+    } catch (e) { if (!quiet) toast('Đã lưu trên máy này, sẽ gửi lên khi có mạng (' + e.message + ')'); }
+  }
+  renderLib(); if (['playlist', 'playlists', 'home'].includes(view.type)) renderMain();
+}
+function newId() { return crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => (Math.random() * 16 | 0).toString(16)); }
+async function addToPl(p, ids) {
+  let list = ids.map(id => tracks.find(t => t.id === id)).filter(Boolean);
+  const skipped = p.shared ? list.filter(t => !t.cloud).length : 0;
+  if (p.shared) list = list.filter(t => t.cloud);
+  const keys = list.map(t => p.shared ? t.sid : t.id).filter(k => !p.items.includes(k));
+  if (skipped) toast(`Playlist chung chỉ chứa bài trong thư viện chung (bỏ qua ${skipped} bài trong máy).`);
+  if (!keys.length) { if (!skipped) toast(`Bài đã có sẵn trong "${p.name}"`); return; }
+  p.items.push(...keys); await savePl(p);
+  toast(`Đã thêm ${keys.length > 1 ? keys.length + ' bài ' : ''}vào "${p.name}"`);
+}
+async function removeFromPl(p, id) {
+  const t = tracks.find(x => x.id === id); if (!t) return;
+  p.items = p.items.filter(k => k !== (p.shared ? t.sid : t.id)); await savePl(p); toast(`Đã bỏ khỏi "${p.name}"`);
+}
+// Hộp thoại tạo / đổi tên
+let plDlgCb = null;
+function openPlDlg({ title, sub, name = '', go = 'Tạo', canShare, shared }, cb) {
+  $('plDlgTitle').textContent = title; $('plDlgSub').textContent = sub; $('plGo').textContent = go;
+  $('plName').value = name; $('plSharedRow').classList.toggle('hidden', !canShare); $('plShared').checked = !!shared;
+  plDlgCb = cb; $('plDlg').showModal(); setTimeout(() => $('plName').focus(), 50);
+}
+$('plForm').onsubmit = e => {
+  const name = $('plName').value.replace(/\s+/g, ' ').trim();
+  if (!name) { e.preventDefault(); $('plName').focus(); return; }
+  const cb = plDlgCb; plDlgCb = null; cb && cb(name, $('plShared').checked);
+};
+function createPl(firstIds = []) {
+  const anyCloud = firstIds.some(id => id.startsWith('c:'));
+  openPlDlg({ title: 'Tạo playlist', sub: 'Đặt tên cho danh sách nhạc', canShare: cloud.on, shared: cloud.on && (anyCloud || !firstIds.length) && firstIds.every(id => id.startsWith('c:')) },
+    async (name, shared) => {
+      const p = { id: newId(), name, items: [], at: Date.now(), shared: shared && cloud.on, by: cloud.user || '' };
+      (p.shared ? PL.shared : PL.mine).push(p);
+      await savePl(p, true);
+      if (firstIds.length) await addToPl(p, firstIds);
+      toast(`Đã tạo playlist "${name}"`);
+      if (!firstIds.length) go({ type: 'playlist', key: p.id });
+    });
+}
+function renamePl(p) {
+  openPlDlg({ title: 'Đổi tên playlist', sub: p.shared ? 'Đổi cho cả nhóm' : 'Playlist của bạn', name: p.name, go: 'Lưu', canShare: false },
+    async name => { p.name = name; await savePl(p); });
+}
+async function deletePl(p) {
+  if (!confirm(`Xóa playlist "${p.name}"?${p.shared ? ' Cả nhóm sẽ không thấy playlist này nữa.' : ''} (Bài hát không bị xóa.)`)) return;
+  if (p.shared) {
+    try { await apiFetch('playlists/' + p.id, { method: 'DELETE' }); }
+    catch (e) { toast('Không xóa được: ' + e.message); return; }
+    PL.shared = PL.shared.filter(x => x !== p); await metaSet('sharedPl', PL.shared);
+  } else { PL.mine = PL.mine.filter(x => x !== p); await savePl({ shared: false }); }
+  toast('Đã xóa playlist'); go({ type: 'playlists' });
+}
+
+// ---------- Menu ⋮ ----------
+let menuStack = [];
+function closeMenu() { $('popMenu').classList.add('hidden'); $('menuShade').classList.add('hidden'); menuStack = []; }
+function showMenu(items, anchor, head) {
+  const m = $('popMenu');
+  menuStack.push({ items, head });
+  m.innerHTML = (head || '') + items.map((it, k) => it.sep ? '<div class="m-sep"></div>'
+    : `<button data-mi="${k}" class="${it.danger ? 'danger' : ''}" role="menuitem">${icon(it.icon || 'note')}<span>${esc(it.label)}</span>${it.sub ? `<span class="chev">›</span>` : ''}</button>`).join('');
+  m.classList.remove('hidden');
+  if (innerWidth <= 760) $('menuShade').classList.remove('hidden');
+  else if (anchor) {
+    const r = anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : { left: anchor.x, right: anchor.x, top: anchor.y, bottom: anchor.y };
+    const w = m.offsetWidth, h = m.offsetHeight;
+    m.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + 'px';
+    m.style.top = (r.bottom + h + 8 < innerHeight ? r.bottom + 4 : Math.max(8, r.top - h - 4)) + 'px';
+  }
+  m.querySelector('button')?.focus({ preventScroll: true });
+}
+$('popMenu').addEventListener('click', e => {
+  e.stopPropagation();
+  const b = e.target.closest('[data-mi]'); if (!b) return;
+  const it = menuStack[menuStack.length - 1].items[+b.dataset.mi];
+  if (it.sub) { const sub = it.sub(); return showMenu([{ label: '‹ Quay lại', icon: 'prev', back: true }, { sep: true }, ...sub], null, menuStack[menuStack.length - 1].head); }
+  if (it.back) { menuStack.pop(); const prev = menuStack.pop(); return showMenu(prev.items, null, prev.head); }
+  closeMenu(); it.run && it.run();
+});
+$('menuShade').onclick = closeMenu;
+document.addEventListener('pointerdown', e => { if (!$('popMenu').classList.contains('hidden') && !e.target.closest('#popMenu')) { if (innerWidth > 760) closeMenu(); } }, true);
+addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+addEventListener('resize', () => { if (innerWidth > 760) $('menuShade').classList.add('hidden'); });
+function trackMenu(id, anchor) {
+  const t = tracks.find(x => x.id === id); if (!t) return;
+  const inPl = view.type === 'playlist' ? allPl().find(x => x.id === view.key) : null;
+  const al = t.album ? albums().find(a => a.list.includes(t)) : null, ar = artists().find(a => a.list.includes(t));
+  const canDel = !t.cloud || cloud.owner || t.by === cloud.user;
+  const items = [
+    { label: 'Phát tiếp theo', icon: 'next-up', run: () => enqueue([id], 'next') },
+    { label: 'Thêm vào hàng chờ', icon: 'queue', run: () => enqueue([id], 'queue') },
+    { label: 'Thêm vào playlist', icon: 'listplus', sub: () => [
+      { label: 'Playlist mới…', icon: 'plus', run: () => createPl([id]) },
+      ...allPl().filter(p => !p.shared || t.cloud).map(p => ({ label: p.name + (p.shared ? ' (chung)' : ''), icon: 'queue', run: () => addToPl(p, [id]) })) ] },
+    ...(inPl && plTracks(inPl).includes(t) ? [{ label: 'Bỏ khỏi playlist này', icon: 'x', run: () => removeFromPl(inPl, id) }] : []),
+    { sep: true },
+    { label: t.liked ? 'Bỏ thích' : 'Thích', icon: 'heart', run: () => toggleLike(id) },
+    ...(ar ? [{ label: 'Tới ca sĩ: ' + ar.name, icon: 'user', run: () => { closeNpOnMobile(); go({ type: 'artist', key: ar.key }); } }] : []),
+    ...(al ? [{ label: 'Tới album: ' + al.name, icon: 'disc', run: () => { closeNpOnMobile(); go({ type: 'album', key: al.key }); } }] : []),
+    ...(canDel ? [{ sep: true }, { label: t.cloud ? 'Xóa khỏi thư viện chung' : t.folderId ? 'Ẩn khỏi app' : 'Xóa khỏi thư viện', icon: 'x', danger: true, run: () => removeTrack(id) }] : []),
+  ];
+  const head = `<div class="m-head">${coverHTML(artUrl(t), t.album || t.title)}<div style="min-width:0"><div class="t1">${esc(t.title)}</div><div class="t2">${esc(t.artist)}</div></div></div>`;
+  menuStack = []; showMenu(items, anchor, head);
+}
+function closeNpOnMobile() { if (innerWidth <= 760) document.body.classList.remove('np-open'); }
+$('npMore').onclick = e => { if (curId) trackMenu(curId, e.currentTarget); };
+// Giữ ngón tay (điện thoại) hoặc chuột phải (máy tính) trên một bài → mở menu
+document.addEventListener('contextmenu', e => {
+  const row = e.target.closest('.row[data-id]'); if (!row) return;
+  e.preventDefault(); trackMenu(row.dataset.id, { x: e.clientX, y: e.clientY });
+});
+
+// ---------- Hẹn giờ tắt nhạc ----------
+const sleepT = { end: 0, track: false };
+const SLEEP_FADE = 10;   // giây nhỏ dần trước khi tắt
+function setSleep(v) {
+  sleepT.end = typeof v === 'number' && v > 0 ? Date.now() + v * 60e3 : 0;
+  sleepT.track = v === 'track';
+  if (!sleepT.end) applyVolume();
+  renderSleep();
+  toast(v === 'track' ? 'Sẽ tắt nhạc khi hết bài này' : v ? `Sẽ tắt nhạc sau ${v} phút` : 'Đã tắt hẹn giờ');
+}
+function renderSleep() {
+  const on = sleepT.end || sleepT.track;
+  const left = sleepT.end ? Math.max(1, Math.ceil((sleepT.end - Date.now()) / 60e3)) + '′' : sleepT.track ? 'hết bài' : '';
+  for (const b of [$('sleepBtn'), $('sleepBtn2')]) {
+    b.classList.toggle('sleep-on', !!on); b.querySelector('.sleep-badge').textContent = left;
+    b.title = on ? 'Hẹn giờ tắt nhạc: ' + (sleepT.track ? 'khi hết bài này' : 'còn ' + left.replace('′', ' phút')) : 'Hẹn giờ tắt nhạc';
+  }
+}
+function sleepTick() {
+  if (!sleepT.end) return;
+  const left = (sleepT.end - Date.now()) / 1000;
+  if (left <= 0) { audio.pause(); sleepT.end = 0; applyVolume(); renderSleep(); toast('Đã tắt nhạc theo hẹn giờ. Ngủ ngon!'); return; }
+  if (left < SLEEP_FADE && !audio.paused) audio.volume = settings.volume * Math.max(0, left / SLEEP_FADE);
+}
+setInterval(() => { sleepTick(); if (sleepT.end) renderSleep(); }, 1000);
+function sleepMenu(anchor) {
+  const opts = [5, 15, 30, 45, 60, 90].map(m => ({ label: m + ' phút', icon: 'moon', run: () => setSleep(m) }));
+  menuStack = [];
+  showMenu([...opts, { label: 'Khi hết bài này', icon: 'disc', run: () => setSleep('track') },
+    ...(sleepT.end || sleepT.track ? [{ sep: true }, { label: 'Tắt hẹn giờ', icon: 'x', danger: true, run: () => setSleep(0) }] : [])],
+    anchor, `<div class="m-head"><b>Hẹn giờ tắt nhạc</b></div>`);
+}
+
 // ---------- Bộ phân tích âm thanh cho vòng sóng (chỉ máy tính: trên điện thoại Web Audio có thể làm nhạc ngắt khi tắt màn hình) ----------
 const beat = { ctx: null, an: null, buf: null, level: 0, raf: 0 };
 const canBeat = matchMedia('(pointer: fine)').matches && !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && !matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1965,7 +2297,7 @@ async function play(id, fromAuto) {
   curUrl = src;
   finishListen(); if (!preview.paused) preview.pause();
   flow.fadeIn = !!fromAuto && settings.fade > 0; flow.preloaded = null;
-  curId = id; audio.src = curUrl; queueArt([t], true);
+  curId = id; userQ.delete(id); audio.src = curUrl; queueArt([t], true);
   if (flow.fadeIn) audio.volume = 0; else applyVolume();
   audio.play().catch(() => {});
   renderNow(); markPlayingRows();
@@ -2060,6 +2392,7 @@ async function removeTrack(id) {
 }
 function groupList(kind, key) {
   if (kind === 'liked') return [liked(), 'Bài hát đã thích'];
+  if (kind === 'playlist') { const p = allPl().find(x => x.id === key); return p ? [plTracks(p), 'Playlist • ' + p.name] : [[], '']; }
   if (kind === 'album') { const a = albums().find(x => x.key === key); return a ? [a.list, 'Album • ' + a.name] : [[], '']; }
   if (kind === 'artist') { const a = artists().find(x => x.key === key); return a ? [a.list, 'Ca sĩ • ' + a.name] : [[], '']; }
   return [[], ''];
@@ -2094,14 +2427,17 @@ audio.onplay = audio.onpause = renderPlayState;
 audio.onplaying = () => { flow.errors = 0; };
 // Bài hỏng / không đọc được → tự chuyển bài thay vì đứng im
 audio.onerror = () => { const t = tracks.find(x => x.id === curId); if (t && audio.src) skipBroken(t, "file không phát được"); };
-audio.onended = () => { if (settings.repeat === 'one') { audio.currentTime = 0; audio.play(); } else step(1, true); };
+audio.onended = () => {
+  if (sleepT.track) { sleepT.track = false; renderSleep(); toast('Đã tắt nhạc theo hẹn giờ. Ngủ ngon!'); return; }
+  if (settings.repeat === 'one') { audio.currentTime = 0; audio.play(); } else step(1, true);
+};
 let seeking = false;
 audio.ontimeupdate = () => {
   const d = audio.duration || 0, c = audio.currentTime;
   for (const [cur, tot] of [['cur', 'tot'], ['cur2', 'tot2']]) { $(cur).textContent = fmt(c); $(tot).textContent = fmt(d); }
   if (!seeking && d) for (const s of [$('seek'), $('seek2')]) { s.value = c / d * 1000; setFill(s); }
   $('miniBar').style.width = d ? (c / d * 100) + '%' : 0;
-  syncLyrics(); trackListen(); flowTick();
+  syncLyrics(); trackListen(); flowTick(); sleepTick();
 };
 for (const s of [$('seek'), $('seek2')]) {
   s.oninput = () => { seeking = true; setFill(s); $('cur').textContent = $('cur2').textContent = fmt(s.value / 1000 * (audio.duration || 0)); };
@@ -2114,7 +2450,7 @@ $('fsBtn').onclick = () => document.fullscreenElement ? document.exitFullscreen(
 
 // Một bộ xử lý click chung cho cả trang
 document.addEventListener('click', async e => {
-  const el = e.target.closest('[data-act],[data-view],[data-open],[data-playgroup],[data-like],[data-del],[data-jump],[data-np],[data-close],[data-preset],[data-rec],[data-recmix],[data-disc],[data-discrefresh],.row');
+  const el = e.target.closest('[data-act],[data-view],[data-open],[data-playgroup],[data-like],[data-del],[data-more],[data-qx],[data-plnew],[data-sleep],[data-jump],[data-np],[data-close],[data-preset],[data-rec],[data-recmix],[data-disc],[data-discrefresh],.row');
   if (!el) return;
   const d = el.dataset;
   if (e.target.closest('a[href]')) return;   // link YouTube/Spotify: để trình duyệt tự mở
@@ -2125,6 +2461,10 @@ document.addEventListener('click', async e => {
   if (d.playgroup !== undefined) { e.stopPropagation(); const [l, c] = groupList(d.playgroup, d.key); return playList(l, null, c); }
   if (d.like) { e.stopPropagation(); return toggleLike(d.like); }
   if (d.del) { e.stopPropagation(); return removeTrack(d.del); }
+  if (d.more) { e.stopPropagation(); return trackMenu(d.more, el); }
+  if (d.qx) return removeQueueAt(+d.qx);
+  if (d.plnew !== undefined) return createPl();
+  if (d.sleep !== undefined) return sleepMenu(el);
   if (d.jump) return play(d.jump);
   if (d.np !== undefined) return document.body.classList.toggle('np-open');
   if (d.close !== undefined) return el.closest('dialog').close();
@@ -2147,6 +2487,8 @@ document.addEventListener('click', async e => {
     case 'openchrome': location.href = `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;end`; return;
     case 'hidechrome': sessionStorage.setItem('hideChrome', '1'); return renderMain();
     case 'logout': return cloudLogout();
+    case 'plrename': { const p = allPl().find(x => x.id === view.key); return p && renamePl(p); }
+    case 'pldelete': { const p = allPl().find(x => x.id === view.key); return p && deletePl(p); }
   }
 });
 $('homeBtn').onclick = () => go({ type: 'home' });
@@ -2302,7 +2644,7 @@ if ('mediaSession' in navigator) {
 }
 
 // Chẩn đoán thanh điều khiển trên thông báo: ghi lại sự kiện phát nhạc + trạng thái, để chụp màn hình gửi lại
-window.APP_VER = 'v23';   // nhớ tăng cùng VERSION trong sw.js
+window.APP_VER = 'v24';   // nhớ tăng cùng VERSION trong sw.js
 const diagLog = [];
 const dlog = m => { diagLog.push(new Date().toTimeString().slice(0, 8) + ' ' + m); if (diagLog.length > 40) diagLog.shift(); if (!$('diagOut').classList.contains('hidden')) renderDiag(); };
 for (const ev of ['play', 'playing', 'pause', 'ended', 'stalled', 'waiting', 'error', 'emptied', 'loadedmetadata'])
@@ -2376,7 +2718,9 @@ if (!window.showDirectoryPicker) $('linkBtn').classList.add('hidden');
     const img = await metaGet('bgImage'); if (img) bgImageUrl = URL.createObjectURL(img);
     if (navigator.storage?.persist) navigator.storage.persist();
   } catch (e) { toast('Trình duyệt không cho lưu thư viện, nhạc chỉ giữ đến khi đóng trang.'); }
-  sortTracks(); applyVolume(); applyBg(); renderAll();
+  sortTracks(); applyVolume(); applyBg();
+  try { await loadPlaylists(); } catch { }
+  renderAll(); renderSleep();
   if (db && location.protocol.startsWith('http')) await loadCloud(true);
   queueArt(live());
   syncFolders(false);

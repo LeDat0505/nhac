@@ -339,6 +339,35 @@ async function deleteSong(env, st, id, user) {
   return json({ ok: true });
 }
 
+// ---------- Playlist chung: mỗi playlist một khóa "pl:<id>" = {name, by, items:[id bài], at} ----------
+const MAX_PL_ITEMS = 2000;
+async function listPlaylists(env) {
+  const keys = [];
+  let cursor;
+  do { const r = await env.INDEX.list({ prefix: 'pl:', cursor }); keys.push(...r.keys); cursor = r.list_complete ? null : r.cursor; } while (cursor);
+  const items = (await Promise.all(keys.map(k => env.INDEX.get(k.name, 'json'))))
+    .map((p, i) => p && { id: keys[i].name.slice(3), ...p }).filter(Boolean);
+  return json({ items });
+}
+async function putPlaylist(req, env, id, user) {
+  let b; try { b = await req.json(); } catch { return err(400, 'Dữ liệu không hợp lệ.'); }
+  const name = String(b?.name ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (!name) return err(400, 'Playlist cần có tên.');
+  if (!Array.isArray(b.items) || b.items.length > MAX_PL_ITEMS || !b.items.every(x => typeof x === 'string' && ID_RE.test(x)))
+    return err(400, 'Danh sách bài không hợp lệ.');
+  const old = await env.INDEX.get('pl:' + id, 'json');
+  const pl = { name, by: old?.by || user.name, items: [...new Set(b.items)], at: Date.now(), editedBy: user.name };
+  await env.INDEX.put('pl:' + id, JSON.stringify(pl));
+  return json({ item: { id, ...pl } });
+}
+async function deletePlaylist(env, id, user) {
+  const old = await env.INDEX.get('pl:' + id, 'json');
+  if (!old) return json({ ok: true });
+  if (old.by !== user.name && !user.owner) return err(403, 'Chỉ người tạo hoặc chủ thư viện mới xóa được playlist này.');
+  await env.INDEX.delete('pl:' + id);
+  return json({ ok: true });
+}
+
 async function api(req, env, url) {
   const parts = url.pathname.replace(/^\/api\/?/, '').split('/');
   const [res, id] = parts;
@@ -362,6 +391,12 @@ async function api(req, env, url) {
   if (res === 'me' && method === 'GET') return json(user);
   if (res === 'library' && method === 'GET') return json(await listLibrary(env));
   if (res === 'discover' && method === 'POST') return discover(req, env);
+  if (res === 'playlists' && !id && method === 'GET') return listPlaylists(env);
+  if (res === 'playlists' && id && ID_RE.test(id) && parts.length === 2) {
+    if (method === 'PUT') return putPlaylist(req, env, id, user);
+    if (method === 'DELETE') return deletePlaylist(env, id, user);
+    return err(405, 'Không hỗ trợ.');
+  }
   if (res === 'preview') return err(410, 'Hãy tải lại app để dùng bản mới.');   // bản cũ dùng link Deezer (đã bỏ)
   if (res === 'art' && id && ID_RE.test(id) && parts.length === 2 && method === 'POST')
     return saveArt(req, env, st, id);
