@@ -124,7 +124,10 @@
   #main { flex: 1; min-width: 0; overflow-y: auto; padding: 18px 22px 28px; }
   .pills { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 18px; position: sticky; top: -18px;
            z-index: 5; padding: 10px 0; margin-top: -10px; }
-  .pills > div { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pills > div { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; min-width: 0; scroll-behavior: smooth;
+                 -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); padding-right: 24px; }
+  .pills > div::-webkit-scrollbar { display: none; }
+  .pills .pill { white-space: nowrap; flex-shrink: 0; }
   .pill { padding: 6px 16px; border-radius: 99px; font-size: 12px; font-weight: 600; background: rgba(59, 7, 100, .6);
           border: 1px solid rgba(192, 132, 252, .15); transition: .2s; }
   .pill:hover { background: rgba(107, 33, 168, .7); }
@@ -1686,10 +1689,20 @@ preview.onplay = renderDiscState;
 //  GIAO DIỆN: CỘT GIỮA
 // =====================================================================
 const PILLS = [['home', 'Tất cả'], ['songs', 'Bài hát'], ['playlists', 'Playlist'], ['albums', 'Album'], ['artists', 'Ca sĩ'], ['liked', 'Đã thích']];
-function go(v) { view = v; $('search').value = ''; renderMain(); renderLib(); $('main').scrollTop = 0; }
+function go(v) {
+  view = v; $('search').value = ''; renderMain(); renderLib(); $('main').scrollTop = 0;
+  const on = document.querySelector('.pills .pill.on'), row = on?.parentElement;   // tab đang chọn bị khuất → cuộn tới
+  if (row && row.scrollWidth > row.clientWidth) { row.style.scrollBehavior = 'auto'; row.scrollLeft = on.offsetLeft - row.clientWidth / 2 + on.offsetWidth / 2; row.style.scrollBehavior = ''; }
+}
 
+function setMain(main, html, pillScroll) {   // vẽ lại nhưng giữ vị trí cuộn ngang của hàng tab
+  main.innerHTML = html;
+  const row = main.querySelector('.pills > div');
+  if (row && pillScroll) { row.style.scrollBehavior = 'auto'; row.scrollLeft = pillScroll; row.style.scrollBehavior = ''; }
+}
 function renderMain() {
   const main = $('main');
+  const pillScroll = main.querySelector('.pills > div')?.scrollLeft || 0;
   const q = $('search').value.trim().toLowerCase();
   const active = q ? '' : ['album', 'artist'].includes(view.type) ? '' : view.type === 'playlist' ? 'playlists' : view.type;
   const pills = cloud.on ? [PILLS[0], ['cloud', 'Thư viện chung'], ...PILLS.slice(1)] : PILLS;
@@ -1723,7 +1736,7 @@ function renderMain() {
                        : cloud.available ? `<button class="soft-btn solid primary" data-act="login">${icon('cloud')}Đăng nhập thư viện chung</button>` : ''}
       ${window.showDirectoryPicker ? `<button class="soft-btn solid ${cloud.on ? '' : 'primary'}" data-act="link">${icon('link')}Liên kết thư mục</button>` : ''}
       <button class="soft-btn solid" data-act="add">${icon('plus')}Thêm bài vào máy này</button></div></div>`;
-    main.innerHTML = html; return;
+    setMain(main, html, pillScroll); return;
   }
 
   if (q) {
@@ -1732,7 +1745,7 @@ function renderMain() {
     const ar = artists().filter(a => a.name.toLowerCase().includes(q)).slice(0, 8);
     if (ar.length || al.length) html += `<section><div class="sec-head"><h2 class="sec">Ca sĩ & album</h2></div><div class="mixes">${ar.map(artistCard).join('')}${al.map(albumCard).join('')}</div></section>`;
     html += `<section><div class="sec-head"><h2 class="sec">Bài hát</h2><span class="t2">${hits.length} kết quả</span></div>${hits.length ? rowsHTML(hits) : '<p class="t2">Không tìm thấy bài nào.</p>'}</section>`;
-    main.innerHTML = html; bindRows(main, hits, `Kết quả tìm “${$('search').value.trim()}”`); return;
+    setMain(main, html, pillScroll); bindRows(main, hits, `Kết quả tìm “${$('search').value.trim()}”`); return;
   }
 
   let list = [], ctx = '';
@@ -1799,7 +1812,7 @@ function renderMain() {
     html += heroHTML({ kind: 'Ca sĩ', name: a.name, sub: `${list.length} bài • ${totalMin(list)} phút`, art: firstArt(list), seed: a.key, ic: 'user', round: true });
     html += rowsHTML(list);
   }
-  main.innerHTML = html;
+  setMain(main, html, pillScroll);
   if (view.type === 'home' && !q) setTimeout(() => loadDiscover(), 0);
   if (list.length) bindRows(main, list, ctx);
 }
@@ -2572,6 +2585,12 @@ document.addEventListener('click', async e => {
 });
 $('homeBtn').onclick = () => go({ type: 'home' });
 $('search').oninput = () => renderMain();
+// Hàng tab: lăn chuột dọc → cuộn ngang (khi không đủ chỗ hiện hết tab)
+$('main').addEventListener('wheel', e => {
+  const row = e.target.closest('.pills > div');
+  if (!row || row.scrollWidth <= row.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+  e.preventDefault(); row.scrollLeft += e.deltaY;
+}, { passive: false });
 $('libToggle').onclick = () => { settings.libWide = !settings.libWide; saveSettings(); renderLib(); };
 $('pLike').onclick = $('npLike').onclick = () => curId && toggleLike(curId);
 $('pCover').onclick = $('queueBtn').onclick = () => document.body.classList.toggle('np-open');
@@ -2724,7 +2743,7 @@ if ('mediaSession' in navigator) {
 }
 
 // Chẩn đoán thanh điều khiển trên thông báo: ghi lại sự kiện phát nhạc + trạng thái, để chụp màn hình gửi lại
-window.APP_VER = 'v26';   // nhớ tăng cùng VERSION trong sw.js
+window.APP_VER = 'v27';   // nhớ tăng cùng VERSION trong sw.js
 const diagLog = [];
 const dlog = m => { diagLog.push(new Date().toTimeString().slice(0, 8) + ' ' + m); if (diagLog.length > 40) diagLog.shift(); if (!$('diagOut').classList.contains('hidden')) renderDiag(); };
 for (const ev of ['play', 'playing', 'pause', 'ended', 'stalled', 'waiting', 'error', 'emptied', 'loadedmetadata'])
